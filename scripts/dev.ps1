@@ -6,7 +6,7 @@ param(
 $ErrorActionPreference = "Stop"
 # Some managed Windows shells expose both `Path` and `PATH`. Start-Process
 # builds a case-insensitive environment dictionary and aborts on that duplicate.
-# Collapse it once so API/worker startup is reliable from Codex, PowerShell and CI.
+# Collapse it once so API/worker startup is reliable from PowerShell y CI.
 $pathValue = $env:Path
 [Environment]::SetEnvironmentVariable("PATH", $null, "Process")
 [Environment]::SetEnvironmentVariable("Path", $pathValue, "Process")

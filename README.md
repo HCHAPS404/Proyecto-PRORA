@@ -35,18 +35,31 @@ La arquitectura completa está en [docs/architecture.md](docs/architecture.md).
 | Sitio (GitHub Pages) | https://hchaps404.github.io/Proyecto-PRORA/ |
 | Inicio | https://hchaps404.github.io/Proyecto-PRORA/#/inicio |
 | Panorama | https://hchaps404.github.io/Proyecto-PRORA/#/panorama |
+| Imagen backend (GHCR) | https://github.com/HCHAPS404/Proyecto-PRORA/pkgs/container/proyecto-prora-api |
 | Actions | https://github.com/HCHAPS404/Proyecto-PRORA/actions |
 
-Guía completa: [docs/github-deploy.md](docs/github-deploy.md).
+### Qué muestra el enlace de GitHub Pages
 
-**Importante:** GitHub Pages publica solo el frontend. FastAPI, PostGIS, worker y
-entrenamiento corren en un servidor aparte. Sin `PRORA_API_BASE_URL` el sitio
-queda en modo invitado; con esa variable (y CORS) apunta a su API HTTPS.
+El enlace de Pages es la **vitrina del frontend** (UI, navegación, paneles).  
+**No** es un despliegue full-stack: GitHub Pages no ejecuta FastAPI, worker ni base de datos.
+
+| Escenario | Qué obtener |
+| --- | --- |
+| Solo ver la interfaz | Abrir el sitio Pages |
+| Demo funcional completa (datos, mapa, predicciones) | API + worker en PC (o Render) y conectar Pages con `PRORA_API_BASE_URL` |
+| Desarrollo / defensa en máquina local | Seguir la sección **Arranque local** abajo |
+
+Guías:
+- Frontend en GitHub: [docs/github-deploy.md](docs/github-deploy.md)
+- Backend (PC, GHCR, Render): [docs/backend-deploy.md](docs/backend-deploy.md)
+
+Sin `PRORA_API_BASE_URL` el sitio queda en modo invitado. Con esa variable (y CORS)
+apunta a su API HTTPS.
 
 Para activar **alerta temprana operativa** (mapa/alertas vigentes) se requiere
 SIVIGILA municipal reciente (≤35 días) y `scripts/operational-bootstrap.ps1`.
-Los datos públicos actuales llegan solo hasta finales de 2024, por eso el
-portfolio permanece en `research_only` hasta cargar un corte autorizado reciente.
+Los datos públicos actuales no cubren un SIVIGILA nacional 2025–2026 completo; el
+portfolio puede permanecer en `research_only` hasta un corte autorizado reciente.
 
 ## Inicio rápido con Docker
 
@@ -84,41 +97,54 @@ Para borrar también volúmenes locales, use `docker compose down --volumes` sol
 cuando haya confirmado que no necesita la base, archivos institucionales ni
 snapshots crudos o artefactos de modelos.
 
-## Desarrollo local
+## Demo completa en PC (recomendado para probar que todo funciona)
 
-Para iniciar frontend y API juntos, comprobar que la base responde y cerrar la
-API al finalizar Vite:
+GitHub Pages **no** sustituye este paso. En su máquina arranca API + worker + UI:
 
 ```powershell
+# Primera vez (dependencias)
+corepack enable
+pnpm install --frozen-lockfile
+cd backend
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -e ".[dev,ml]"
+cd ..
+
+# Cada vez que quiera la demo funcional (desde la raíz del repo)
 npm run dev:full
 ```
 
-Este comando evita dejar el frontend apuntando a una API apagada. Reutiliza una
-API que ya esté lista en el puerto 8000 y falla de forma explícita si la API o
-el puerto web no pueden iniciarse.
+La API usa por defecto SQLite en `backend/prora.db` (cwd del proceso backend).
+Si define `PRORA_DATABASE_URL`, hágalo relativo a `backend/` o con ruta absoluta.
 
-Frontend:
+Abra:
+
+| Servicio | URL |
+| --- | --- |
+| Frontend | http://127.0.0.1:5173/ |
+| API (docs) | http://127.0.0.1:8000/docs |
+| Salud | http://127.0.0.1:8000/ready |
+
+`npm run dev:full` (`scripts/dev.ps1`) inicia o reutiliza la API en `:8000`,
+levanta el **worker** (sync/train) y Vite con `VITE_API_BASE_URL` apuntando a
+esa API. Al cerrar Vite intenta detener lo que arrancó.
+
+Alternativa equivalente:
 
 ```powershell
-corepack enable
-pnpm install --frozen-lockfile
-pnpm run dev
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\local-demo.ps1
 ```
 
-Backend (Python 3.11 o superior):
+El modo SQLite facilita desarrollo y pruebas; producción usa PostgreSQL/PostGIS
+y Alembic. Para LSTM: `.[lstm]`; para SHAP: `.[explainability]`.
 
-```powershell
-cd backend
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-pip install -e ".[dev,ml]"
-$env:PRORA_DATABASE_URL = "sqlite+aiosqlite:///./prora.db"
-uvicorn app.main:app --reload --port 8000
-```
+### Modelos de predicción en local
 
-El modo SQLite facilita desarrollo y pruebas, pero producción usa PostgreSQL con
-PostGIS y migraciones Alembic. Para entrenar el modelo secuencial instale además
-`.[lstm]`; para SHAP, `.[explainability]`.
+Las 6 enfermedades priorizadas tienen champions **h3 y h4** entrenados (modo
+`research_only` mientras el corte epidemiológico nacional no sea ≤ 35 días).
+El mapa y la analítica usan predicción retrospectiva de investigación cuando
+no hay señal operativa.
 
 ## Verificación
 
