@@ -286,6 +286,10 @@ export default function Dashboard({ onOpenAlerts, onOpenData, onNotify }: Dashbo
   }, [diseaseId, observedTerritories, riskItems, riskState, territoriesState])
 
   const highRiskItems = useMemo(() => riskItems.filter((item) => item.risk_level === 'alto' || item.risk_level === 'critico'), [riskItems])
+  const researchForecastMode = useMemo(
+    () => riskItems.length > 0 && riskItems.every((item) => item.forecast_mode === 'retrospective_research' || item.operationally_eligible === false),
+    [riskItems],
+  )
   const populationUnderSignal = useMemo(() => highRiskItems.reduce((total, item) => total + (item.population ?? 0), 0), [highRiskItems])
   const completeness = useMemo(() => {
     const values = riskItems.map((item) => item.data_completeness).filter((value): value is number => typeof value === 'number')
@@ -319,7 +323,7 @@ export default function Dashboard({ onOpenAlerts, onOpenData, onNotify }: Dashbo
     ...riskItems.map((item) => ({
       value: item.cod_dane,
       label: `${item.municipality} · ${item.department}`,
-      group: 'Con pronóstico operativo',
+      group: researchForecastMode ? 'Con pronóstico del modelo (retrospectivo)' : 'Con pronóstico operativo',
       searchText: `${item.cod_dane} ${item.department}`,
     })),
     ...historicalOnlyTerritories.map((item) => ({
@@ -328,7 +332,7 @@ export default function Dashboard({ onOpenAlerts, onOpenData, onNotify }: Dashbo
       group: `Con registros históricos (${historicalOnlyTerritories.length})`,
       searchText: `${item.cod_dane} ${item.department}`,
     })),
-  ], [historicalOnlyTerritories, riskItems])
+  ], [historicalOnlyTerritories, researchForecastMode, riskItems])
   const territoriesLoading = riskState === 'loading' || territoriesState === 'loading'
   const hasTerritories = riskItems.length > 0 || observedTerritories.length > 0
 
@@ -370,8 +374,8 @@ export default function Dashboard({ onOpenAlerts, onOpenData, onNotify }: Dashbo
       <div className={`data-availability-banner data-availability-banner--${riskState}`} role="status">
         <Info size={18} />
         <div>
-          <strong>{riskState === 'loading' ? 'Verificando pronósticos operativos' : riskState === 'live' ? `${riskItems.length} municipios con predicción vigente` : riskState === 'offline' ? 'No hay conexión con el backend' : 'Sin predicciones operativas vigentes'}</strong>
-          <span>{riskState === 'loading' ? 'Esta verificación termina automáticamente si el servicio no responde.' : riskState === 'live' ? `${highRiskItems.length} territorios en nivel alto o crítico · ${formatNumber(populationUnderSignal)} habitantes bajo señal · completitud ${completeness == null ? 'no informada' : `${formatNumber(completeness * 100)}%`}.` : riskState === 'offline' ? territoriesState === 'live' ? `La capa predictiva no respondió; aún puede consultar el histórico de ${observedTerritories.length} municipios.` : 'Inicia la API y pulsa Actualizar. El mapa conserva únicamente la geometría administrativa.' : territoriesState === 'live' ? `${observedTerritories.length} municipios tienen observaciones históricas disponibles para análisis. No se colorean ni clasifican como riesgo actual.` : model ? `Existe el modelo ${model.version}, pero la API no publicó pronósticos elegibles para el corte actual.` : 'No existe un modelo operativo publicado para esta enfermedad y horizonte.'}</span>
+          <strong>{riskState === 'loading' ? 'Verificando pronósticos del modelo' : riskState === 'live' ? `${riskItems.length} municipios con predicción ${researchForecastMode ? 'retrospectiva del modelo' : 'vigente'}` : riskState === 'offline' ? 'No hay conexión con el backend' : 'Sin predicciones publicadas para esta enfermedad'}</strong>
+          <span>{riskState === 'loading' ? 'Esta verificación termina automáticamente si el servicio no responde.' : riskState === 'live' ? `${highRiskItems.length} territorios en nivel alto o crítico · ${formatNumber(populationUnderSignal)} habitantes bajo señal · completitud ${completeness == null ? 'no informada' : `${formatNumber(completeness * 100)}%`}${researchForecastMode ? ' · Modo investigación: el corte epidemiológico no es actual, pero el mapa usa el último champion entrenado.' : '.'}` : riskState === 'offline' ? territoriesState === 'live' ? `La capa predictiva no respondió; aún puede consultar el histórico de ${observedTerritories.length} municipios.` : 'Inicia la API y pulsa Actualizar. El mapa conserva únicamente la geometría administrativa.' : territoriesState === 'live' ? `${observedTerritories.length} municipios tienen observaciones históricas disponibles para análisis. No se colorean ni clasifican como riesgo actual.` : model ? `Existe el modelo ${model.version}, pero la API no publicó pronósticos elegibles para el corte actual.` : 'No existe un modelo operativo publicado para esta enfermedad y horizonte.'}</span>
         </div>
         {riskState === 'offline' && <button className="button button--secondary button--small" type="button" onClick={() => setReloadKey((value) => value + 1)}><RefreshCw size={15} /> Reconectar</button>}
       </div>

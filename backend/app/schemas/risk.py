@@ -162,6 +162,7 @@ class RiskMapItem(BaseModel):
     observation_cutoff: date | None = None
     observation_age_days: int | None = None
     operationally_eligible: bool = True
+    forecast_mode: Literal["operational", "retrospective_research"] = "operational"
 
 
 class HistoricalPointResponse(BaseModel):

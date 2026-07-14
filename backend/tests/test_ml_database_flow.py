@@ -347,7 +347,16 @@ def test_training_job_persists_traceable_versions_and_operational_forecasts(
 
     risk_map = client.get("/api/v1/risk/map?disease=dengue&horizon=4")
     assert risk_map.status_code == 200
-    assert risk_map.json() == []
+    body = risk_map.json()
+    assert body
+    assert all(item["forecast_mode"] == "retrospective_research" for item in body)
+    assert all(item["operationally_eligible"] is False for item in body)
+
+    operational_only = client.get(
+        "/api/v1/risk/map?disease=dengue&horizon=4&include_research=false"
+    )
+    assert operational_only.status_code == 200
+    assert operational_only.json() == []
 
     trace = client.get(f"/api/v1/models/dengue/3/versions/{version}/trace")
     assert trace.status_code == 200

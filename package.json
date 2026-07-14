@@ -8,8 +8,10 @@
     "dev": "vite",
     "dev:full": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev.ps1",
     "build": "tsc -b && vite build",
+    "build:pages": "tsc -b && vite build --mode production",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "preview:pages": "vite preview --base /Proyecto-PRORA/"
   },
   "pnpm": {
     "onlyBuiltDependencies": ["esbuild"]

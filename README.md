@@ -27,6 +27,27 @@ agudas (IRA) en Colombia. Integra datos municipales agregados, pronósticos a
 
 La arquitectura completa está en [docs/architecture.md](docs/architecture.md).
 
+## GitHub (Pages + Actions)
+
+| Recurso | Enlace |
+| --- | --- |
+| Repositorio | https://github.com/HCHAPS404/Proyecto-PRORA |
+| Sitio (GitHub Pages) | https://hchaps404.github.io/Proyecto-PRORA/ |
+| Inicio | https://hchaps404.github.io/Proyecto-PRORA/#/inicio |
+| Panorama | https://hchaps404.github.io/Proyecto-PRORA/#/panorama |
+| Actions | https://github.com/HCHAPS404/Proyecto-PRORA/actions |
+
+Guía completa: [docs/github-deploy.md](docs/github-deploy.md).
+
+**Importante:** GitHub Pages publica solo el frontend. FastAPI, PostGIS, worker y
+entrenamiento corren en un servidor aparte. Sin `PRORA_API_BASE_URL` el sitio
+queda en modo invitado; con esa variable (y CORS) apunta a su API HTTPS.
+
+Para activar **alerta temprana operativa** (mapa/alertas vigentes) se requiere
+SIVIGILA municipal reciente (≤35 días) y `scripts/operational-bootstrap.ps1`.
+Los datos públicos actuales llegan solo hasta finales de 2024, por eso el
+portfolio permanece en `research_only` hasta cargar un corte autorizado reciente.
+
 ## Inicio rápido con Docker
 
 Requisitos: Docker Engine con Compose v2 y, para la imagen completa, espacio

@@ -1,11 +1,19 @@
 // Same-origin by default: Vite proxies this path locally and Nginx does the
-// same in production. An explicit URL can still be supplied for deployments
-// where the API lives on another host.
+// same in Docker. GitHub Pages must set VITE_API_BASE_URL to a public HTTPS API
+// (Pages cannot host FastAPI). An empty string means "no remote API" → guest mode.
+const configuredApi = import.meta.env.VITE_API_BASE_URL
 const DEFAULT_API_URL = import.meta.env.DEV
   ? 'http://127.0.0.1:8000/api/v1'
   : '/api/v1'
 
-export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || DEFAULT_API_URL).replace(/\/$/, '')
+export const API_BASE_URL = (
+  configuredApi === undefined || configuredApi === null
+    ? DEFAULT_API_URL
+    : String(configuredApi)
+).replace(/\/$/, '')
+
+/** True when the build intentionally omits a backend (typical GitHub Pages guest publish). */
+export const API_CONFIGURED = API_BASE_URL.length > 0
 
 const ACCESS_TOKEN_KEY = 'prora-access-token'
 const REFRESH_TOKEN_KEY = 'prora-refresh-token'
@@ -85,6 +93,7 @@ export interface RiskMapItem {
   observation_cutoff?: string | null
   observation_age_days?: number | null
   operationally_eligible?: boolean
+  forecast_mode?: 'operational' | 'retrospective_research'
 }
 
 export interface DataSourceRecord {

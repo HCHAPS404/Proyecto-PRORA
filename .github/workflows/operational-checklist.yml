@@ -1,0 +1,44 @@
+name: Checklist operativo semanal
+
+# GitHub no hospeda la API. Este workflow documenta y recuerda los pasos para
+# mantener alerta temprana operativa en el servidor donde corre Compose/worker.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Viernes 15:00 UTC ≈ fin de semana epidemiológica típica
+    - cron: "0 15 * * 5"
+
+permissions:
+  contents: read
+
+jobs:
+  checklist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Recordatorio operativo PRORA
+        run: |
+          cat <<'EOF'
+          === Checklist alerta temprana operativa ===
+
+          Frontend Pages:
+            https://hchaps404.github.io/Proyecto-PRORA/
+
+          En el servidor de API/worker (NO en GitHub Pages):
+            1. Sincronizar o cargar SIVIGILA autorizado reciente (corte ≤ 35 días)
+               POST /api/v1/sources/sivigila-current-authorized/upload
+            2. Verificar portfolio:
+               GET /api/v1/models/readiness/portfolio
+               → operational_forecast_eligible = true
+            3. Ejecutar bootstrap con token de operador:
+               powershell -File scripts/operational-bootstrap.ps1 -ApiBase https://SU-API -Token $TOKEN -ForceTrain
+            4. Confirmar mapa estricto:
+               GET /api/v1/risk/map?disease=dengue&horizon=4&include_research=false
+            5. CORS debe incluir https://hchaps404.github.io
+            6. Variable GitHub PRORA_API_BASE_URL = https://SU-API/api/v1
+            7. Re-ejecutar workflow "Publicar frontend en GitHub Pages"
+
+          Sin datos municipales recientes el sistema permanece en research_only.
+          Documentación: docs/github-deploy.md
+          EOF

@@ -311,7 +311,15 @@ def test_forecast_series_falls_back_to_latest_champion_as_research_only(
     assert payload["metadata"]["operationally_eligible"] is False
     assert payload["metadata"]["observation_cutoff"] == str(cutoff)
     assert "no para alertas operativas" in payload["metadata"]["message"]
-    assert client.get("/api/v1/risk/map?disease=zika&horizon=4").json() == []
+    risk_map = client.get("/api/v1/risk/map?disease=zika&horizon=4").json()
+    assert len(risk_map) == 1
+    assert risk_map[0]["cod_dane"] == "54001"
+    assert risk_map[0]["forecast_mode"] == "retrospective_research"
+    assert risk_map[0]["operationally_eligible"] is False
+    assert (
+        client.get("/api/v1/risk/map?disease=zika&horizon=4&include_research=false").json()
+        == []
+    )
 
 
 def test_current_bes_reference_prefers_latest_ingested_correction(client: TestClient) -> None:

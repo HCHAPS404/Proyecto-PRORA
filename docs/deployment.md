@@ -101,6 +101,13 @@ y Nginx hace proxy a la API, por lo que un cambio exige reconstruir el frontend.
 
 ## GitHub Pages: alcance correcto
 
+Guía detallada y URLs del repo: [github-deploy.md](github-deploy.md).
+
+Sitio esperado para este proyecto:
+
+- https://hchaps404.github.io/Proyecto-PRORA/
+- https://hchaps404.github.io/Proyecto-PRORA/#/inicio
+
 El workflow `.github/workflows/pages.yml` publica el frontend estático. En la
 configuración del repositorio defina la variable `PRORA_API_BASE_URL` con la URL
 HTTPS pública del backend, por ejemplo `https://api.example.gov.co/api/v1`.
@@ -113,6 +120,9 @@ PRORA mantiene el modo invitado y sus preferencias locales en ese navegador;
 cuentas compartidas, alertas, ingestas, modelos y reportes persistentes requieren
 desplegar `api`, `worker` y PostgreSQL/PostGIS en infraestructura separada. No use
 GitHub ni `localStorage` como base de datos epidemiológica.
+
+Checklist operativo semanal: `.github/workflows/operational-checklist.yml` y
+`scripts/operational-bootstrap.ps1`.
 
 ## Backfill y promoción de modelos
 

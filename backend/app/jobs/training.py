@@ -20,7 +20,7 @@ from app.ml.features import build_supervised_frame, build_weekly_features
 from app.ml.models import ModelBundle
 from app.ml.readiness import assess_training_frame
 from app.ml.registry import ModelRegistry
-from app.ml.service import ForecastService
+from app.ml.service import ForecastResult, ForecastService
 from app.models.epidemiology import (
     AlertEvent,
     Forecast,
@@ -30,6 +30,11 @@ from app.models.epidemiology import (
 )
 
 EXPLANATION_TERRITORY_CHUNK_SIZE = 64
+# Full local explanations for every municipality dominate wall-clock time on
+# national panels. Prioritise high-risk territories; the rest stay auditable
+# via component predictions and can be recomputed later.
+EXPLANATION_PRIORITY_LIMIT = 120
+EXPLANATION_PRIORITY_PROBABILITY = 0.55
 
 
 async def claim_training_job(session: AsyncSession) -> ModelTrainingRun | None:
@@ -83,7 +88,7 @@ async def process_training_job(
                 "Sincronice/cargue SIVIGILA primero."
             )
         snapshot = persist_training_dataset(dataset, registry.root)
-        config = MLConfig()
+        config = _ml_config_from_parameters(parameters)
         readiness = assess_training_frame(panel, disease, config)
         if not readiness["research_training_eligible"]:
             failed = ", ".join(
@@ -214,6 +219,7 @@ async def process_training_job(
         disease_reference = feature_frame[
             feature_frame[config.disease_column].astype(str) == disease
         ]
+        priority_territories = _priority_explanation_territories(results)
         explanation_maps: dict[int, dict[str, tuple[list[dict[str, Any]], str | None]]] = {}
         for horizon, version_name in version_names.items():
             bundle, _ = service.get_artifact(disease, horizon, version_name)
@@ -223,6 +229,7 @@ async def process_training_job(
                 latest_rows,
                 baseline,
                 chunk_size=EXPLANATION_TERRITORY_CHUNK_SIZE,
+                priority_territories=priority_territories.get(horizon, set()),
             )
         eligible_count = 0
         withheld_count = 0
@@ -249,7 +256,8 @@ async def process_training_job(
                 warnings.append("model_did_not_pass_naive_baseline_gate")
             if explanation_warning:
                 warnings.append(explanation_warning)
-                explanation_failures += 1
+                if explanation_warning != "explanation_deferred_low_priority":
+                    explanation_failures += 1
             forecast_values: dict[str, Any] = {
                 "municipality_code": result.territory_id,
                 "disease": result.disease,
@@ -415,12 +423,66 @@ def _drivers_for_forecast(
         return [], "explanation_unavailable"
 
 
+def _ml_config_from_parameters(parameters: dict[str, Any]) -> MLConfig:
+    """Build MLConfig, allowing safe hyperparameter overrides from the job."""
+
+    allowed = {
+        "rf_estimators",
+        "hgb_iterations",
+        "lstm_epochs",
+        "lstm_hidden_size",
+        "n_splits",
+        "territorial_splits",
+        "territorial_meta_splits",
+        "min_train_weeks",
+        "validation_weeks",
+        "enable_lstm",
+        "random_state",
+    }
+    overrides = {key: parameters[key] for key in allowed if key in parameters}
+    config = MLConfig(**overrides)
+    config.validate()
+    return config
+
+
+def _priority_explanation_territories(
+    results: list[ForecastResult],
+) -> dict[int, set[str]]:
+    """Select territories that most need local drivers after a national run."""
+
+    ranked: dict[int, list[ForecastResult]] = {}
+    for result in results:
+        ranked.setdefault(result.horizon_weeks, []).append(result)
+    selected: dict[int, set[str]] = {}
+    for horizon, items in ranked.items():
+        ordered = sorted(
+            items,
+            key=lambda item: (
+                float(item.outbreak_probability),
+                float(item.predicted_cases),
+            ),
+            reverse=True,
+        )
+        keep = {
+            str(item.territory_id)
+            for item in ordered
+            if float(item.outbreak_probability) >= EXPLANATION_PRIORITY_PROBABILITY
+        }
+        for item in ordered:
+            if len(keep) >= EXPLANATION_PRIORITY_LIMIT:
+                break
+            keep.add(str(item.territory_id))
+        selected[horizon] = keep
+    return selected
+
+
 def _drivers_for_horizon(
     bundle: ModelBundle,
     latest_rows: pd.DataFrame,
     baseline: pd.Series,
     *,
     chunk_size: int,
+    priority_territories: set[str] | None = None,
 ) -> dict[str, tuple[list[dict[str, Any]], str | None]]:
     """Batch explanations while isolating failures to their exact territory."""
 
@@ -430,6 +492,11 @@ def _drivers_for_horizon(
         if feature not in scoped.columns:
             scoped[feature] = pd.NA
     output: dict[str, tuple[list[dict[str, Any]], str | None]] = {}
+    if priority_territories is not None:
+        deferred = scoped[~scoped["territory_id"].isin(priority_territories)]
+        for territory in deferred["territory_id"].astype(str):
+            output[territory] = ([], "explanation_deferred_low_priority")
+        scoped = scoped[scoped["territory_id"].isin(priority_territories)]
     for start in range(0, len(scoped), chunk_size):
         chunk = scoped.iloc[start : start + chunk_size]
         try:

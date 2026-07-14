@@ -16,7 +16,8 @@ services:
     ports: !reset []
     environment:
       PRORA_ENVIRONMENT: ${PRORA_ENVIRONMENT:-production}
-      PRORA_CORS_ORIGINS: '${PRORA_CORS_ORIGINS:-["http://localhost:8080"]}'
+      # Incluya https://hchaps404.github.io si el UI se sirve desde GitHub Pages.
+      PRORA_CORS_ORIGINS: '${PRORA_CORS_ORIGINS:-["http://localhost:8080","https://hchaps404.github.io"]}'
       PRORA_AUTO_CREATE_TABLES: "false"
 
   worker:

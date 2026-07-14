@@ -54,10 +54,18 @@ Operator = Annotated[User, Depends(require_roles(UserRole.ANALYST, UserRole.ADMI
 RISK_TRANSLATION = {"low": "bajo", "moderate": "moderado", "high": "alto", "critical": "critico"}
 
 
+def _forecast_mode(forecast: Forecast) -> str:
+    eligible = bool(getattr(forecast, "operationally_eligible", True))
+    if eligible and forecast.target_week >= date.today():
+        return "operational"
+    return "retrospective_research"
+
+
 def _risk_item(
     forecast: Forecast, municipality: Municipality, version: ModelVersion
 ) -> RiskMapItem:
     level = RISK_TRANSLATION.get(forecast.risk_level, forecast.risk_level)
+    mode = _forecast_mode(forecast)
     return RiskMapItem(
         cod_dane=municipality.code,
         municipality=municipality.name,
@@ -78,7 +86,8 @@ def _risk_item(
         data_completeness=forecast.data_completeness,
         observation_cutoff=getattr(forecast, "observation_cutoff", None),
         observation_age_days=getattr(forecast, "observation_age_days", None),
-        operationally_eligible=getattr(forecast, "operationally_eligible", True),
+        operationally_eligible=mode == "operational",
+        forecast_mode=mode,  # type: ignore[arg-type]
     )
 
 
@@ -89,6 +98,13 @@ def _operational_forecast_filter():
             Forecast.target_week >= date.today(),
         )
     return Forecast.target_week >= date.today()
+
+
+def _champion_forecast_clause(*, operational_only: bool):
+    clauses = [ModelVersion.stage == "champion"]
+    if operational_only:
+        clauses.append(_operational_forecast_filter())
+    return and_(*clauses)
 
 
 def _territory_scope(territory: str):
@@ -695,12 +711,13 @@ async def historical_territories(
     )
 
 
-@router.get("/risk/map", response_model=list[RiskMapItem])
-async def risk_map(
+async def _query_risk_map(
     session: SessionDep,
     disease: Disease,
-    horizon: int = Query(default=4, ge=3, le=4),
-) -> list[RiskMapItem]:
+    horizon: int,
+    *,
+    operational_only: bool,
+) -> list[tuple[Forecast, Municipality, ModelVersion]]:
     latest = (
         select(
             Forecast.municipality_code.label("municipality_code"),
@@ -710,8 +727,7 @@ async def risk_map(
         .where(
             Forecast.disease == disease,
             Forecast.horizon_weeks == horizon,
-            ModelVersion.stage == "champion",
-            _operational_forecast_filter(),
+            _champion_forecast_clause(operational_only=operational_only),
         )
         .group_by(Forecast.municipality_code)
         .subquery()
@@ -730,38 +746,60 @@ async def risk_map(
         .where(
             Forecast.disease == disease,
             Forecast.horizon_weeks == horizon,
-            ModelVersion.stage == "champion",
-            _operational_forecast_filter(),
+            _champion_forecast_clause(operational_only=operational_only),
         )
         .order_by(desc(Forecast.outbreak_probability))
     )
-    rows = (await session.execute(statement)).all()
+    return list((await session.execute(statement)).all())
+
+
+@router.get("/risk/map", response_model=list[RiskMapItem])
+async def risk_map(
+    session: SessionDep,
+    disease: Disease,
+    horizon: int = Query(default=4, ge=3, le=4),
+    include_research: bool = Query(
+        default=True,
+        description=(
+            "Si no hay pronósticos operativos vigentes, devolver el último champion "
+            "retrospectivo etiquetado como research."
+        ),
+    ),
+) -> list[RiskMapItem]:
+    rows = await _query_risk_map(session, disease, horizon, operational_only=True)
+    if not rows and include_research:
+        rows = await _query_risk_map(session, disease, horizon, operational_only=False)
     return [_risk_item(forecast, municipality, version) for forecast, municipality, version in rows]
 
 
 async def _latest_forecast(
-    session: SessionDep, cod_dane: str, disease: Disease, horizon: int
+    session: SessionDep,
+    cod_dane: str,
+    disease: Disease,
+    horizon: int,
+    *,
+    include_research: bool = True,
 ) -> tuple[Forecast, Municipality, ModelVersion]:
-    statement = (
-        select(Forecast, Municipality, ModelVersion)
-        .join(Municipality, Municipality.code == Forecast.municipality_code)
-        .join(ModelVersion, ModelVersion.id == Forecast.model_version_id)
-        .where(
-            Forecast.municipality_code == cod_dane,
-            Forecast.disease == disease,
-            Forecast.horizon_weeks == horizon,
-            ModelVersion.stage == "champion",
-            _operational_forecast_filter(),
+    for operational_only in (True, False) if include_research else (True,):
+        statement = (
+            select(Forecast, Municipality, ModelVersion)
+            .join(Municipality, Municipality.code == Forecast.municipality_code)
+            .join(ModelVersion, ModelVersion.id == Forecast.model_version_id)
+            .where(
+                Forecast.municipality_code == cod_dane,
+                Forecast.disease == disease,
+                Forecast.horizon_weeks == horizon,
+                _champion_forecast_clause(operational_only=operational_only),
+            )
+            .order_by(desc(Forecast.issued_at))
+            .limit(1)
         )
-        .order_by(desc(Forecast.issued_at))
-        .limit(1)
+        row = (await session.execute(statement)).one_or_none()
+        if row is not None:
+            return row
+    raise DomainError(
+        "forecast_not_found", "No existe una predicción para los filtros solicitados", 404
     )
-    row = (await session.execute(statement)).one_or_none()
-    if row is None:
-        raise DomainError(
-            "forecast_not_found", "No existe una predicción para los filtros solicitados", 404
-        )
-    return row
 
 
 @router.get("/risk/municipalities/{cod_dane}", response_model=RiskMapItem)
@@ -770,8 +808,11 @@ async def municipality_risk(
     session: SessionDep,
     disease: Disease,
     horizon: int = Query(default=4, ge=3, le=4),
+    include_research: bool = Query(default=True),
 ) -> RiskMapItem:
-    forecast, municipality, version = await _latest_forecast(session, cod_dane, disease, horizon)
+    forecast, municipality, version = await _latest_forecast(
+        session, cod_dane, disease, horizon, include_research=include_research
+    )
     return _risk_item(forecast, municipality, version)
 
 
@@ -815,8 +856,11 @@ async def municipality_explanation(
     session: SessionDep,
     disease: Disease,
     horizon: int = Query(default=4, ge=3, le=4),
+    include_research: bool = Query(default=True),
 ) -> ExplanationResponse:
-    forecast, _, version = await _latest_forecast(session, cod_dane, disease, horizon)
+    forecast, _, version = await _latest_forecast(
+        session, cod_dane, disease, horizon, include_research=include_research
+    )
     return ExplanationResponse(
         forecast_id=forecast.id,
         cod_dane=cod_dane,

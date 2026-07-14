@@ -28,10 +28,19 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm run lint
-      - run: pnpm run build
+      - name: Build para GitHub Pages
+        run: pnpm run build
         env:
-          VITE_API_BASE_URL: ${{ vars.PRORA_API_BASE_URL }}
+          # Por defecto /Proyecto-PRORA/; override con variable del repo.
           VITE_BASE_PATH: ${{ vars.PRORA_PAGES_BASE_PATH || format('/{0}/', github.event.repository.name) }}
+          # Sin API remota → frontend en modo invitado. Defina PRORA_API_BASE_URL
+          # (p. ej. https://api.ejemplo.gov.co/api/v1) para conectar el backend.
+          VITE_API_BASE_URL: ${{ vars.PRORA_API_BASE_URL }}
+      - name: Asegurar .nojekyll en dist
+        run: |
+          touch dist/.nojekyll
+          test -f dist/index.html
+          echo "Pages URL esperada: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/"
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
@@ -47,3 +56,13 @@ jobs:
       - name: Publicar
         id: deployment
         uses: actions/deploy-pages@v4
+      - name: Resumen de enlaces
+        run: |
+          echo "### PRORA en GitHub Pages" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Sitio:** https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Inicio:** https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/#/inicio" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Panorama:** https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/#/panorama" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Repo:** https://github.com/${{ github.repository }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Si definió \`PRORA_API_BASE_URL\`, el frontend llamará a esa API (CORS debe permitir el origen de Pages)." >> "$GITHUB_STEP_SUMMARY"
