@@ -11,7 +11,7 @@ from typing import Any
 
 import anyio
 import httpx
-from sqlalchemy import select
+from sqlalchemy import select, text as sa_text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.connectors import (
@@ -20,12 +20,26 @@ from app.connectors import (
     Aggregate,
     DANECNPVConnector,
     DIVIPOLAConnector,
+    Filter,
     IDEAMClimateConnector,
     IDEAMStationsConnector,
+    Operator,
     PAIConnector,
     SIVIGILAConnector,
+    SafeQuery,
     SocrataClient,
     sivigila_2024_event_files,
+)
+from app.connectors.territorial_sivigila import (
+    FEDERATION_SOURCE_ID,
+    TerritorialSourceProfile,
+    disease_from_event_and_name,
+    extract_cases,
+    extract_event_code,
+    extract_year_week,
+    pad_divipola,
+    profile_by_source_id,
+    territorial_profiles,
 )
 from app.core.config import Settings
 from app.core.errors import DomainError
@@ -35,6 +49,7 @@ from app.ingestion.pai_files import (
     PAI_ADAPTER_VERSION,
     PAI_HISTORY_CONTRACT,
     PAIFileContract,
+    PAIMunicipalRecord,
     parse_pai_publication,
 )
 from app.ingestion.sivigila_microdata import (
@@ -66,14 +81,33 @@ from app.services.canonical_store import (
     canonicalize_pai,
     canonicalize_sivigila,
     climate_week_key,
+    epidemiological_week_start,
+    raw_record_sha256,
     store_snapshot,
     upsert_climate_buckets,
     upsert_cnpv,
+    upsert_irca_batch,
     upsert_municipal_pai_batch,
     upsert_pai,
     upsert_sivigila_batch,
     upsert_station,
 )
+
+_MONTH_NAME_TO_NUMBER = {
+    "ENERO": 1,
+    "FEBRERO": 2,
+    "MARZO": 3,
+    "ABRIL": 4,
+    "MAYO": 5,
+    "JUNIO": 6,
+    "JULIO": 7,
+    "AGOSTO": 8,
+    "SEPTIEMBRE": 9,
+    "SETIEMBRE": 9,
+    "OCTUBRE": 10,
+    "NOVIEMBRE": 11,
+    "DICIEMBRE": 12,
+}
 
 
 @dataclass(slots=True)
@@ -228,6 +262,10 @@ async def _dispatch(
         return await _sync_sivigila_microdata_2024(
             session, run, source, request, settings, http_client
         )
+    if source.id == FEDERATION_SOURCE_ID or profile_by_source_id(source.id) is not None:
+        return await _sync_territorial_sivigila(
+            session, run, source, request, settings, http_client
+        )
     if source.id == "ins-bes-weekly":
         return await _sync_bes(session, run, source, request, settings, http_client)
     if source.id == "pai-national":
@@ -252,6 +290,12 @@ async def _dispatch(
             http_client,
             PAI_2026_CONTRACT,
         )
+    if source.id == "pai-valle-municipal":
+        return await _sync_pai_territorial_socrata(
+            session, run, source, request, settings, http_client
+        )
+    if source.id == "ins-irca-water-quality":
+        return await _sync_irca(session, run, source, request, settings, http_client)
     if source.id == "ideam-stations":
         return await _sync_stations(session, run, source, settings, http_client)
     if source.id in {"ideam-precipitation", "ideam-temperature", "ideam-humidity"}:
@@ -510,6 +554,301 @@ def _writer(
         dataset_id=source.dataset_id,
         query=query,
         publication=publication,
+    )
+
+
+def _resolve_territorial_municipality(
+    resolver: MunicipalityResolver,
+    profile: TerritorialSourceProfile,
+    row: dict[str, Any],
+) -> str | None:
+    if profile.fixed_municipality_code:
+        code = profile.fixed_municipality_code
+        return code if code in resolver.by_code else None
+    fields = profile.fields
+    code = pad_divipola(
+        str(row.get(fields.department_code)) if fields.department_code else None,
+        str(row.get(fields.municipality_code)) if fields.municipality_code else None,
+    )
+    if code and code in resolver.by_code:
+        return code
+    department = row.get(fields.department_name) if fields.department_name else None
+    municipality = row.get(fields.municipality_name) if fields.municipality_name else None
+    match = resolver.names(department, municipality)
+    return match.code if match is not None else None
+
+
+def _canonicalize_territorial_row(
+    profile: TerritorialSourceProfile,
+    resolver: MunicipalityResolver,
+    row: dict[str, Any],
+) -> SIVIGILACanonical:
+    year_week = extract_year_week(row, profile.fields)
+    if year_week is None:
+        raise CanonicalValidationError("invalid_period", "Año/semana epidemiológica inválidos")
+    year, week = year_week
+    if year < profile.year_from or year > profile.year_to:
+        raise CanonicalValidationError(
+            "year_out_of_contract",
+            f"Año {year} fuera del contrato {profile.year_from}-{profile.year_to}",
+        )
+    event_code = extract_event_code(row, profile.fields)
+    event_name = (
+        str(row.get(profile.fields.event_name)) if profile.fields.event_name else None
+    )
+    disease = disease_from_event_and_name(
+        event_code, event_name, allowed=profile.diseases
+    )
+    if (
+        disease is None
+        and len(profile.diseases) == 1
+        and not profile.fields.event_code
+        and not profile.fields.event_name
+    ):
+        disease = profile.diseases[0]
+    if disease is None:
+        raise CanonicalValidationError(
+            "event_not_prioritized",
+            "Evento fuera de enfermedades priorizadas o nombre inconsistente",
+        )
+    municipality_code = _resolve_territorial_municipality(resolver, profile, row)
+    if municipality_code is None:
+        raise CanonicalValidationError(
+            "unknown_divipola",
+            "No se pudo resolver municipio DIVIPOLA para la fila territorial",
+        )
+    try:
+        cases = extract_cases(row, profile)
+    except ValueError as exc:
+        raise CanonicalValidationError("invalid_case_count", str(exc)) from exc
+    return SIVIGILACanonical(
+        municipality_code=municipality_code,
+        disease=disease,
+        week_start=epidemiological_week_start(year, week),
+        epidemiological_week=week,
+        epidemiological_year=year,
+        cases=cases,
+        raw_record_sha256=raw_record_sha256(row),
+    )
+
+
+async def _sync_territorial_profile(
+    session: AsyncSession,
+    run: IngestionRun,
+    source: DataSource,
+    profile: TerritorialSourceProfile,
+    request: SourceSyncRequest,
+    settings: Settings,
+    http_client: httpx.AsyncClient,
+) -> SyncOutcome:
+    client = _socrata_client(source, settings, http_client)
+    year_from = max(profile.year_from, (request.from_date or date(profile.year_from, 1, 1)).year)
+    year_to = min(
+        profile.year_to,
+        (request.to_date - timedelta(days=1)).year if request.to_date else profile.year_to,
+    )
+    if year_from > year_to:
+        raise DomainError(
+            "source_period_unavailable",
+            f"Periodo solicitado fuera del contrato {profile.year_from}-{profile.year_to}",
+            422,
+        )
+    query = SafeQuery(
+        filters=(
+            Filter(profile.fields.year, Operator.GTE, str(year_from)),
+            Filter(profile.fields.year, Operator.LTE, str(year_to)),
+        ),
+        order_by=(
+            (profile.fields.year, "ASC"),
+            (profile.fields.week, "ASC"),
+        ),
+    )
+    metadata = await client.fetch_metadata(profile.dataset_id)
+    writer = _writer(
+        settings,
+        source,
+        run,
+        {
+            "dataset_id": profile.dataset_id,
+            "year_from": year_from,
+            "year_to": year_to,
+            "adapter": "territorial_sivigila",
+            **query.parameters(),
+        },
+        _publication(metadata),
+    )
+    resolver = await MunicipalityResolver.load(session)
+    aggregated: dict[tuple[str, str, date], SIVIGILACanonical] = {}
+    accepted = rejected = row_number = 0
+    try:
+        async for page in client.paginate(
+            profile.dataset_id,
+            query=query,
+            page_size=2_000,
+            max_records=request.max_records,
+        ):
+            writer.append_page(page)
+            for row in page:
+                row_number += 1
+                try:
+                    item = _canonicalize_territorial_row(profile, resolver, row)
+                    key = (item.municipality_code, item.disease, item.week_start)
+                    current = aggregated.get(key)
+                    if current is None:
+                        aggregated[key] = item
+                    else:
+                        aggregated[key] = replace(current, cases=current.cases + item.cases)
+                    accepted += 1
+                except CanonicalValidationError as exc:
+                    rejected += 1
+                    await add_quarantine(session, run, row_number, row, exc)
+        artifact = writer.finalize(
+            extra={
+                "adapter": "territorial_sivigila",
+                "dataset_id": profile.dataset_id,
+                "year_from": year_from,
+                "year_to": year_to,
+                "row_kind": profile.kind,
+                "snapshot_policy": "municipality/week aggregates only",
+            }
+        )
+    except Exception:
+        writer.abort()
+        raise
+    await upsert_sivigila_batch(session, run, resolver, list(aggregated.values()))
+    return SyncOutcome(
+        artifact=artifact,
+        accepted=accepted,
+        rejected=rejected,
+        canonical_rows=len(aggregated),
+        details={
+            "adapter": "territorial_sivigila",
+            "dataset_id": profile.dataset_id,
+            "year_from": year_from,
+            "year_to": year_to,
+            "territory_source": profile.source_id,
+            "extends_beyond_2024": profile.year_to >= 2025,
+        },
+    )
+
+
+async def _sync_territorial_sivigila(
+    session: AsyncSession,
+    run: IngestionRun,
+    source: DataSource,
+    request: SourceSyncRequest,
+    settings: Settings,
+    http_client: httpx.AsyncClient,
+) -> SyncOutcome:
+    if source.id == FEDERATION_SOURCE_ID:
+        members = list(territorial_profiles())
+        totals = {
+            "accepted": 0,
+            "rejected": 0,
+            "canonical_rows": 0,
+            "members": [],
+        }
+        # Synthetic writer for federation rollup.
+        writer = _writer(
+            settings,
+            source,
+            run,
+            {"federation": True, "members": [item.source_id for item in members]},
+            {"name": source.name},
+        )
+        try:
+            for profile in members:
+                member_source = await session.get(DataSource, profile.source_id)
+                if member_source is None:
+                    raise DomainError(
+                        "source_not_found",
+                        (
+                            f"Falta la fuente miembro {profile.source_id}; "
+                            "ejecute seed del catálogo oficial antes de sincronizar "
+                            "la federación territorial."
+                        ),
+                        409,
+                    )
+                # Persist under the member source for lineage, but keep the
+                # federation run for operational rollup when called as federation.
+                member_run = IngestionRun(
+                    source_id=profile.source_id,
+                    status=PipelineStatus.RUNNING.value,
+                    started_at=datetime.now(UTC),
+                    provenance={
+                        "kind": "territorial_federation_member",
+                        "federation_parent": FEDERATION_SOURCE_ID,
+                        "federation_run_id": run.id,
+                        "request": (run.provenance or {}).get("request", {}),
+                    },
+                )
+                session.add(member_run)
+                await session.flush()
+                try:
+                    outcome = await _sync_territorial_profile(
+                        session,
+                        member_run,
+                        member_source,
+                        profile,
+                        request,
+                        settings,
+                        http_client,
+                    )
+                    store_snapshot(session, member_run, outcome.artifact)
+                    member_run.rows_read = outcome.artifact.row_count
+                    member_run.rows_accepted = outcome.accepted
+                    member_run.rows_rejected = outcome.rejected
+                    member_run.checksum = outcome.artifact.sha256
+                    member_run.quality_report = {
+                        "canonical_rows": outcome.canonical_rows,
+                        "details": outcome.details,
+                    }
+                    member_run.status = PipelineStatus.SUCCEEDED.value
+                    member_run.finished_at = datetime.now(UTC)
+                except Exception as exc:
+                    member_run.status = PipelineStatus.FAILED.value
+                    member_run.finished_at = datetime.now(UTC)
+                    member_run.error_message = str(exc)[:2_000]
+                    raise
+                totals["accepted"] += outcome.accepted
+                totals["rejected"] += outcome.rejected
+                totals["canonical_rows"] += outcome.canonical_rows
+                totals["members"].append(
+                    {
+                        "source_id": profile.source_id,
+                        "dataset_id": profile.dataset_id,
+                        "member_run_id": member_run.id,
+                        "accepted": outcome.accepted,
+                        "canonical_rows": outcome.canonical_rows,
+                        "year_to": profile.year_to,
+                        "snapshot_sha256": outcome.artifact.sha256,
+                    }
+                )
+            artifact = writer.finalize(extra={"federation_members": totals["members"]})
+        except Exception:
+            writer.abort()
+            raise
+        return SyncOutcome(
+            artifact=artifact,
+            accepted=int(totals["accepted"]),
+            rejected=int(totals["rejected"]),
+            canonical_rows=int(totals["canonical_rows"]),
+            details={
+                "federation": True,
+                "members": totals["members"],
+                "merge_policy": "prefer_newer_epidemiological_year",
+            },
+        )
+
+    profile = profile_by_source_id(source.id)
+    if profile is None:
+        raise DomainError(
+            "source_processor_unavailable",
+            "Perfil territorial SIVIGILA no registrado",
+            409,
+        )
+    return await _sync_territorial_profile(
+        session, run, source, profile, request, settings, http_client
     )
 
 
@@ -857,6 +1196,206 @@ async def _sync_sivigila_microdata_2024(
             "ira_context_only_events": [345, 995],
         },
         cursor="2024-final",
+    )
+
+
+async def _ensure_irca_column(session: AsyncSession) -> None:
+    """SQLite create_all does not add columns; keep local demos usable."""
+
+    bind = session.get_bind()
+    if bind is None or bind.dialect.name != "sqlite":
+        return
+    rows = await session.execute(sa_text("PRAGMA table_info(socioeconomic_indicators)"))
+    columns = {str(row[1]) for row in rows}
+    if "irca_index" not in columns:
+        await session.execute(
+            sa_text("ALTER TABLE socioeconomic_indicators ADD COLUMN irca_index FLOAT")
+        )
+
+
+async def _sync_irca(
+    session: AsyncSession,
+    run: IngestionRun,
+    source: DataSource,
+    request: SourceSyncRequest,
+    settings: Settings,
+    http_client: httpx.AsyncClient,
+) -> SyncOutcome:
+    await _ensure_irca_column(session)
+    client = _socrata_client(source, settings, http_client)
+    year_from = (request.from_date or date(2018, 1, 1)).year
+    year_to = (request.to_date - timedelta(days=1)).year if request.to_date else 2024
+    year_from = max(2013, year_from)
+    year_to = min(2024, year_to)
+    query = SafeQuery(
+        filters=(
+            Filter("a_o", Operator.GTE, str(year_from)),
+            Filter("a_o", Operator.LTE, str(year_to)),
+        ),
+        order_by=(("a_o", "ASC"), ("municipiocodigo", "ASC")),
+    )
+    metadata = await client.fetch_metadata(source.dataset_id or "nxt2-39c3")
+    writer = _writer(settings, source, run, query.parameters(), _publication(metadata))
+    resolver = await MunicipalityResolver.load(session)
+    accepted = rejected = row_number = 0
+    batch: list[tuple[str, int, float]] = []
+    try:
+        async for page in client.paginate(
+            source.dataset_id or "nxt2-39c3",
+            query=query,
+            page_size=2_000,
+            max_records=request.max_records,
+        ):
+            writer.append_page(page)
+            for row in page:
+                row_number += 1
+                code = str(row.get("municipiocodigo") or "").strip().zfill(5)
+                if not code.isdigit() or code in {"00000"} or "#" in str(row.get("municipiocodigo") or ""):
+                    rejected += 1
+                    await add_quarantine(
+                        session,
+                        run,
+                        row_number,
+                        row,
+                        CanonicalValidationError(
+                            "non_municipal_irca_row",
+                            "Fila IRCA departamental/agregada omitida",
+                        ),
+                    )
+                    continue
+                if code not in resolver.by_code:
+                    rejected += 1
+                    await add_quarantine(
+                        session,
+                        run,
+                        row_number,
+                        row,
+                        CanonicalValidationError("unknown_divipola", f"DIVIPOLA {code}"),
+                    )
+                    continue
+                try:
+                    year = int(str(row["a_o"]).split(".", 1)[0])
+                    irca = float(row["irca"])
+                except (KeyError, TypeError, ValueError) as exc:
+                    rejected += 1
+                    await add_quarantine(
+                        session,
+                        run,
+                        row_number,
+                        row,
+                        CanonicalValidationError("invalid_irca", str(exc)),
+                    )
+                    continue
+                if year < year_from or year > year_to or irca < 0 or irca > 100:
+                    rejected += 1
+                    continue
+                batch.append((code, year, irca))
+                accepted += 1
+        artifact = writer.finalize(extra={"adapter": "irca_municipal", "year_from": year_from, "year_to": year_to})
+    except Exception:
+        writer.abort()
+        raise
+    await upsert_irca_batch(session, run, batch)
+    return SyncOutcome(
+        artifact=artifact,
+        accepted=accepted,
+        rejected=rejected,
+        canonical_rows=len(batch),
+        details={"adapter": "irca_municipal", "year_from": year_from, "year_to": year_to},
+    )
+
+
+async def _sync_pai_territorial_socrata(
+    session: AsyncSession,
+    run: IngestionRun,
+    source: DataSource,
+    request: SourceSyncRequest,
+    settings: Settings,
+    http_client: httpx.AsyncClient,
+) -> SyncOutcome:
+    client = _socrata_client(source, settings, http_client)
+    year_from = (request.from_date or date(2022, 1, 1)).year
+    year_to = (request.to_date - timedelta(days=1)).year if request.to_date else 2022
+    query = SafeQuery(
+        filters=(
+            Filter("a_o", Operator.GTE, str(year_from)),
+            Filter("a_o", Operator.LTE, str(year_to)),
+        ),
+        order_by=(("a_o", "ASC"), ("mes", "ASC")),
+    )
+    metadata = await client.fetch_metadata(source.dataset_id or "uw8e-gzpp")
+    writer = _writer(settings, source, run, query.parameters(), _publication(metadata))
+    resolver = await MunicipalityResolver.load(session)
+    records: list[PAIMunicipalRecord] = []
+    accepted = rejected = row_number = 0
+    try:
+        async for page in client.paginate(
+            source.dataset_id or "uw8e-gzpp",
+            query=query,
+            page_size=2_000,
+            max_records=request.max_records,
+        ):
+            writer.append_page(page)
+            for row in page:
+                row_number += 1
+                code = str(row.get("codigo_municipio") or "").strip().zfill(5)
+                month_name = str(row.get("mes") or "").strip().upper()
+                month = _MONTH_NAME_TO_NUMBER.get(month_name)
+                biologic = str(row.get("biologico") or "").strip()
+                if code not in resolver.by_code or month is None or not biologic:
+                    rejected += 1
+                    await add_quarantine(
+                        session,
+                        run,
+                        row_number,
+                        row,
+                        CanonicalValidationError(
+                            "invalid_pai_territorial_row",
+                            "Municipio/mes/biológico inválidos",
+                        ),
+                    )
+                    continue
+                try:
+                    year = int(str(row["a_o"]).split(".", 1)[0])
+                    coverage = float(str(row.get("cobertura") or "0").replace(",", "."))
+                    doses_raw = row.get("dosis_aplicadas")
+                    doses = int(float(doses_raw)) if doses_raw not in (None, "") else None
+                except (KeyError, TypeError, ValueError) as exc:
+                    rejected += 1
+                    await add_quarantine(
+                        session,
+                        run,
+                        row_number,
+                        row,
+                        CanonicalValidationError("invalid_pai_values", str(exc)),
+                    )
+                    continue
+                vaccine = biologic.upper().replace(" ", "_")[:100]
+                records.append(
+                    PAIMunicipalRecord(
+                        municipality_code=code,
+                        year=year,
+                        month=month,
+                        vaccine=vaccine,
+                        source_label=biologic,
+                        coverage_pct=coverage,
+                        doses_applied=doses,
+                        sheet="socrata",
+                        row_number=row_number,
+                    )
+                )
+                accepted += 1
+        artifact = writer.finalize(extra={"adapter": "pai_territorial_socrata"})
+    except Exception:
+        writer.abort()
+        raise
+    await upsert_municipal_pai_batch(session, run, records)
+    return SyncOutcome(
+        artifact=artifact,
+        accepted=accepted,
+        rejected=rejected,
+        canonical_rows=len(records),
+        details={"adapter": "pai_territorial_socrata", "year_from": year_from, "year_to": year_to},
     )
 
 

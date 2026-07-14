@@ -12,6 +12,11 @@ from .sivigila_microdata import (
     SIVIGILAMicrodataMeasure,
     sivigila_2024_event_files,
 )
+from .territorial_sivigila import (
+    FEDERATION_SOURCE_ID,
+    TerritorialSourceProfile,
+    territorial_profiles,
+)
 from .socrata import (
     Aggregate,
     Filter,
@@ -29,6 +34,7 @@ __all__ = [
     "DANEConnector",
     "DANECNPVConnector",
     "DIVIPOLAConnector",
+    "FEDERATION_SOURCE_ID",
     "Filter",
     "Function",
     "GroupExpression",
@@ -46,6 +52,8 @@ __all__ = [
     "SafeQuery",
     "SelectExpression",
     "SocrataClient",
+    "TerritorialSourceProfile",
     "UnsafeQueryError",
     "sivigila_2024_event_files",
+    "territorial_profiles",
 ]

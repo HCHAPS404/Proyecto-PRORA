@@ -63,6 +63,7 @@ class MLConfig:
         "sewer_access",
         "overcrowding",
         "nbi",
+        "irca_index",
         "urban_population_pct",
         "rural_population_pct",
         "population",

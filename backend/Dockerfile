@@ -16,19 +16,23 @@ RUN apt-get update \
 COPY pyproject.toml alembic.ini README.md ./
 COPY alembic ./alembic
 COPY app ./app
+COPY docker-entrypoint.sh ./docker-entrypoint.sh
 
 # El valor completo incluye LSTM y explicabilidad. Para una imagen liviana de API
 # puede usarse --build-arg PRORA_EXTRAS=ml.
 ARG PRORA_EXTRAS=ml,lstm,explainability
 RUN pip install --upgrade pip \
     && pip install ".[${PRORA_EXTRAS}]" \
+    && chmod +x /app/docker-entrypoint.sh \
     && mkdir -p /app/artifacts/models /app/data/inbox /app/data/raw \
     && chown -R prora:prora /app
 
 USER prora
 EXPOSE 8000
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3)" || exit 1
+# Render y otros PaaS inyectan PORT; en local/compose se usa 8000.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
+  CMD python -c "import os,urllib.request; p=os.environ.get('PORT','8000'); urllib.request.urlopen(f'http://127.0.0.1:{p}/ready', timeout=3)" || exit 1
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips=*"]
+ENTRYPOINT ["./docker-entrypoint.sh"]
+CMD ["api"]

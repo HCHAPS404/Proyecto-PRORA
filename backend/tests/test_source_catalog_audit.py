@@ -63,8 +63,32 @@ def test_documented_audit_contains_every_verified_public_dataset() -> None:
         "hp9r-jxuu",
         "39dh-rc72",
         "env9-bhc9",
+        "tz38-fg9k",
+        "fhz2-4x64",
+        "tm62-e28n",
+        "dq2k-gub9",
+        "qzc7-jbg3",
+        "3kuf-t86h",
+        "map9-mdzc",
+        "dtct-ww7w",
+        "xc7d-5tmm",
+        "nxt2-39c3",
+        "uw8e-gzpp",
     ):
         assert f"`{dataset_id}`" in documentation
+
+
+def test_territorial_federation_is_active_in_catalog() -> None:
+    catalog = _catalog()
+    federation = catalog["sivigila-territorial-open"]
+    assert federation["status"] == SourceStatus.ACTIVE.value
+    members = federation["configuration"]["member_source_ids"]
+    assert len(members) >= 9
+    for source_id in members:
+        assert catalog[source_id]["status"] == SourceStatus.ACTIVE.value
+        assert catalog[source_id]["configuration"]["adapter"] == "territorial_sivigila"
+    assert catalog["ins-irca-water-quality"]["status"] == SourceStatus.ACTIVE.value
+    assert catalog["pai-valle-municipal"]["status"] == SourceStatus.ACTIVE.value
 
 
 def test_documentation_does_not_treat_public_files_as_institutional_access() -> None:

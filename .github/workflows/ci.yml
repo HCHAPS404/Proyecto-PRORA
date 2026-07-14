@@ -40,6 +40,14 @@ jobs:
           -f docker-compose.yml
           -f docker-compose.prod.yml
           config --quiet
+      - name: Validar Compose GHCR
+        run: >
+          docker compose
+          --env-file .env.example
+          -f docker-compose.yml
+          -f docker-compose.prod.yml
+          -f docker-compose.ghcr.yml
+          config --quiet
 
   backend:
     runs-on: ubuntu-latest

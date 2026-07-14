@@ -135,6 +135,55 @@ def epidemiological_week_start(year: int, week: int) -> date:
     return january_fourth - timedelta(days=sunday_offset) + timedelta(weeks=week - 1)
 
 
+_TERRITORIAL_OPEN_SOURCE_PREFIXES = (
+    "sivigila-boyaca-",
+    "sivigila-caqueta-",
+    "sivigila-pereira-",
+    "sivigila-tulua-",
+    "sivigila-bucaramanga-",
+    "sivigila-casanare-",
+    "sivigila-santa-rosa-",
+    "sivigila-territorial-",
+)
+
+
+def _is_territorial_open_source(source_id: str) -> bool:
+    return source_id.startswith(_TERRITORIAL_OPEN_SOURCE_PREFIXES) or source_id in {
+        "sivigila-territorial-open",
+        "sivigila-boyaca-events",
+        "sivigila-caqueta-dengue",
+        "sivigila-pereira-dengue",
+        "sivigila-tulua-dengue",
+        "sivigila-bucaramanga-dengue",
+        "sivigila-bucaramanga-events",
+        "sivigila-bucaramanga-ira",
+        "sivigila-casanare-dengue",
+        "sivigila-santa-rosa-cabal-events",
+    }
+
+
+def _should_replace_observation(
+    *,
+    stored_year: int,
+    stored_source_id: str,
+    incoming_year: int,
+    incoming_source_id: str,
+) -> bool:
+    """Decide whether an incoming municipio/semana row may overwrite storage."""
+
+    if incoming_year > stored_year:
+        return True
+    if incoming_year < stored_year:
+        return False
+    # Same year: keep territorial open data ahead of national historical backfill.
+    if _is_territorial_open_source(stored_source_id) and incoming_source_id in {
+        "sivigila-national",
+        "sivigila-microdata-2024",
+    }:
+        return False
+    return True
+
+
 def canonicalize_sivigila(row: dict[str, Any]) -> SIVIGILACanonical:
     observation, quality = normalize_sivigila(row)
     if not quality.valid:
@@ -262,6 +311,13 @@ async def upsert_sivigila_batch(
             session.add(stored)
             by_key[key] = stored
         else:
+            if not _should_replace_observation(
+                stored_year=int(stored.epidemiological_year or 0),
+                stored_source_id=str(stored.source_id or ""),
+                incoming_year=int(item.epidemiological_year or 0),
+                incoming_source_id=str(run.source_id or ""),
+            ):
+                continue
             for field_name, value in values.items():
                 setattr(stored, field_name, value)
 
@@ -468,6 +524,49 @@ def _apply_climate_bucket(
         "aggregation": "station-day then municipality-week",
     }
     stored.metric_provenance = provenance
+
+
+async def upsert_irca_batch(
+    session: AsyncSession,
+    run: IngestionRun,
+    items: list[tuple[str, int, float]],
+) -> None:
+    """Upsert municipal IRCA values without erasing CNPV water/sewer indicators."""
+
+    if not items:
+        return
+    codes = sorted({code for code, _, _ in items})
+    years = sorted({year for _, year, _ in items})
+    existing = list(
+        (
+            await session.scalars(
+                select(SocioeconomicIndicator).where(
+                    SocioeconomicIndicator.municipality_code.in_(codes),
+                    SocioeconomicIndicator.year.in_(years),
+                )
+            )
+        ).all()
+    )
+    by_key = {(item.municipality_code, item.year): item for item in existing}
+    for municipality_code, year, irca in items:
+        key = (municipality_code, year)
+        stored = by_key.get(key)
+        if stored is None:
+            stored = SocioeconomicIndicator(
+                municipality_code=municipality_code,
+                year=year,
+                irca_index=irca,
+                source_id=run.source_id,
+                ingestion_run_id=run.id,
+            )
+            session.add(stored)
+            by_key[key] = stored
+            continue
+        stored.irca_index = irca
+        # Keep CNPV structural fields; only retag source when row was IRCA-created.
+        if stored.source_id in {None, "", run.source_id, "ins-irca-water-quality"}:
+            stored.source_id = run.source_id
+            stored.ingestion_run_id = run.id
 
 
 async def upsert_municipal_pai_batch(

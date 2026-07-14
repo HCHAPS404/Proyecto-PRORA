@@ -78,9 +78,15 @@ function SeriesChart({ series, diseaseLabel }: { series: AnalyticsSeries; diseas
   const plotWidth = width - left - 22
   const plotHeight = height - top - 44
   const maximum = Math.max(...points.map((point) => point.observed_cases), 1)
+  const incidenceValues = points.map((point) => point.incidence_per_100k).filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
+  const maxIncidence = Math.max(...incidenceValues, 0)
   const x = (index: number) => left + (index / Math.max(points.length - 1, 1)) * plotWidth
   const y = (value: number) => top + plotHeight - (value / maximum) * plotHeight
+  const yIncidence = (value: number) => top + plotHeight - (maxIncidence > 0 ? (value / maxIncidence) * plotHeight : 0)
   const path = points.map((point, index) => `${index ? 'L' : 'M'} ${x(index)} ${y(point.observed_cases)}`).join(' ')
+  const incidencePath = maxIncidence > 0
+    ? points.map((point, index) => `${index ? 'L' : 'M'} ${x(index)} ${yIncidence(point.incidence_per_100k ?? 0)}`).join(' ')
+    : ''
   const tickIndexes = Array.from(new Set([0, Math.floor((points.length - 1) / 2), points.length - 1]))
 
   return (
@@ -93,9 +99,69 @@ function SeriesChart({ series, diseaseLabel }: { series: AnalyticsSeries; diseas
         })}
         <path d={`${path} L ${x(points.length - 1)} ${top + plotHeight} L ${x(0)} ${top + plotHeight} Z`} className="analytics-history-area" />
         <path d={path} className="analytics-history-observed" />
-        {points.map((point, index) => <circle key={`${point.week}-${index}`} cx={x(index)} cy={y(point.observed_cases)} r={index === points.length - 1 ? 5 : 3} className="analytics-history-point"><title>{formatDate(point.week)}: {formatNumber(point.observed_cases)} casos{point.is_preliminary ? ' · preliminar' : ''}</title></circle>)}
+        {incidencePath ? <path d={incidencePath} className="analytics-history-incidence" fill="none" /> : null}
+        {points.map((point, index) => <circle key={`${point.week}-${index}`} cx={x(index)} cy={y(point.observed_cases)} r={index === points.length - 1 ? 5 : 3} className="analytics-history-point"><title>{formatDate(point.week)}: {formatNumber(point.observed_cases)} casos{point.incidence_per_100k != null ? ` · ${formatNumber(point.incidence_per_100k)} /100k` : ''}{point.is_preliminary ? ' · preliminar' : ''}</title></circle>)}
         {tickIndexes.map((index) => <text key={index} x={x(index)} y={height - 13} textAnchor="middle" className="analytics-axis-label">{formatDate(points[index].week)}</text>)}
       </svg>
+      <div className="analytics-legend analytics-legend--inline">
+        <span><i className="analytics-legend__line analytics-legend__line--observed" /> Casos semanales</span>
+        {maxIncidence > 0 ? <span><i className="analytics-legend__line analytics-legend__line--incidence" /> Incidencia /100k</span> : null}
+      </div>
+    </div>
+  )
+}
+
+function HistoryInsights({ series, summary }: { series: AnalyticsSeries; summary: AnalyticsSummary | null }) {
+  const points = series.points
+  const totalCases = points.reduce((sum, point) => sum + point.observed_cases, 0)
+  const peak = points.reduce((best, point) => (point.observed_cases > best.observed_cases ? point : best), points[0])
+  const avgWeekly = totalCases / Math.max(points.length, 1)
+  const byYear = new Map<number, number>()
+  for (const point of points) {
+    const year = new Date(`${point.week}T00:00:00`).getFullYear()
+    byYear.set(year, (byYear.get(year) ?? 0) + point.observed_cases)
+  }
+  const yearBars = [...byYear.entries()].sort((a, b) => a[0] - b[0])
+  const yearMax = Math.max(...yearBars.map(([, value]) => value), 1)
+  const windows = summary?.windows ?? []
+
+  return (
+    <div className="analytics-insights">
+      <div className="analytics-summary-row analytics-summary-row--rich">
+        <div><span>Casos en la ventana</span><strong>{formatNumber(totalCases)}</strong></div>
+        <div><span>Promedio semanal</span><strong>{formatNumber(avgWeekly)}</strong></div>
+        <div><span>Pico observado</span><strong>{formatNumber(peak.observed_cases)}</strong><small>{formatDate(peak.week)}</small></div>
+        <div><span>Semanas con dato</span><strong>{formatNumber(points.length)}</strong></div>
+      </div>
+      {yearBars.length > 1 ? (
+        <div className="analytics-year-panel">
+          <div className="analytics-chart-heading"><div><h3>Casos por año epidemiológico</h3><p>Suma de notificaciones semanales publicadas en el territorio seleccionado.</p></div></div>
+          <div className="analytics-year-bars">
+            {yearBars.map(([year, value]) => (
+              <div className="analytics-year-bar" key={year}>
+                <strong>{formatNumber(value)}</strong>
+                <span className="analytics-year-bar__track"><i style={{ height: `${(value / yearMax) * 100}%` }} /></span>
+                <small>{year}</small>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      {windows.length ? (
+        <div className="analytics-windows">
+          {windows.map((window) => (
+            <div key={window.weeks} className="analytics-window-card">
+              <span>Últimas {window.weeks} semanas</span>
+              <strong>{formatNumber(window.observed_cases)} casos</strong>
+              <small>
+                {window.comparable && window.percent_change_vs_previous != null
+                  ? `${window.percent_change_vs_previous >= 0 ? '+' : ''}${formatNumber(window.percent_change_vs_previous)}% vs ventana previa`
+                  : `${window.observed_week_count} semanas con dato · ${window.missing_week_count} faltantes`}
+              </small>
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -258,7 +324,17 @@ export default function AnalyticsStudio({ diseaseId, horizon, territories = [], 
 
       {state === 'live' && view === 'history' && (
         <div className="analytics-view analytics-view--history">
-          {series?.points.length ? <><div className="analytics-summary-row"><div><span>Primer corte</span><strong>{formatDate(series.points[0].week)}</strong></div><div><span>Último corte</span><strong>{formatDate(series.points[series.points.length - 1]?.week)}</strong></div><div><span>Municipios con casos notificados</span><strong>{series.points[series.points.length - 1]?.municipalities_with_notified_cases ?? '—'}</strong></div></div><SeriesChart series={series} diseaseLabel={diseaseLabel} /></> : <EmptyPanel onRetry={() => setReloadKey((value) => value + 1)} />}
+          {series?.points.length ? (
+            <>
+              <div className="analytics-summary-row">
+                <div><span>Primer corte</span><strong>{formatDate(series.points[0].week)}</strong></div>
+                <div><span>Último corte</span><strong>{formatDate(series.points[series.points.length - 1]?.week)}</strong></div>
+                <div><span>Municipios con casos notificados</span><strong>{series.points[series.points.length - 1]?.municipalities_with_notified_cases ?? '—'}</strong></div>
+              </div>
+              <HistoryInsights series={series} summary={summary} />
+              <SeriesChart series={series} diseaseLabel={diseaseLabel} />
+            </>
+          ) : <EmptyPanel onRetry={() => setReloadKey((value) => value + 1)} />}
         </div>
       )}
 

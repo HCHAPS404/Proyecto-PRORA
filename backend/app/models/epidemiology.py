@@ -363,6 +363,8 @@ class SocioeconomicIndicator(Base):
     sewer_access_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     overcrowding_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     nbi_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # IRCA municipal (0–100); lower is better water quality. Distinct from CNPV water_access.
+    irca_index: Mapped[float | None] = mapped_column(Float, nullable=True)
     urban_population_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     rural_population_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     populated_center_population_pct: Mapped[float | None] = mapped_column(

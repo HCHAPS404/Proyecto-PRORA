@@ -347,6 +347,7 @@ async def build_training_dataset(session: AsyncSession, disease: str) -> Trainin
                     "sewer_access": item.sewer_access_pct,
                     "overcrowding": item.overcrowding_pct,
                     "nbi": item.nbi_pct,
+                    "irca_index": item.irca_index,
                     "urban_population_pct": item.urban_population_pct,
                     "rural_population_pct": item.rural_population_pct,
                     "populated_center_population_pct": (

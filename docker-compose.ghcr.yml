@@ -1,0 +1,23 @@
+# Usa la imagen publicada en GitHub Container Registry en lugar de construir local.
+# Requiere login: echo $GITHUB_TOKEN | docker login ghcr.io -u USER --password-stdin
+#
+#   docker compose -f docker-compose.yml -f docker-compose.ghcr.yml pull
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.ghcr.yml up -d
+
+x-ghcr-image: &ghcr-image
+  image: ${PRORA_GHCR_IMAGE:-ghcr.io/hchaps404/proyecto-prora-api:latest}
+  build: !reset null
+  pull_policy: always
+
+services:
+  migrate:
+    <<: *ghcr-image
+    command: ["migrate"]
+
+  api:
+    <<: *ghcr-image
+    command: ["api"]
+
+  worker:
+    <<: *ghcr-image
+    command: ["worker"]

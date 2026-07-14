@@ -5,6 +5,20 @@ from app.core.config import Settings
 from app.main import create_app
 
 
+def test_paas_postgres_urls_are_normalized_to_asyncpg() -> None:
+    for raw in (
+        "postgres://user:pass@db.example/prora",
+        "postgresql://user:pass@db.example/prora",
+    ):
+        settings = Settings(
+            _env_file=None,
+            environment="test",
+            database_url=raw,
+            jwt_secret=SecretStr("test-only-secret-with-at-least-thirty-two-characters"),
+        )
+        assert settings.database_url == "postgresql+asyncpg://user:pass@db.example/prora"
+
+
 def test_health_ready_openapi_and_request_id(client: TestClient) -> None:
     health = client.get("/health", headers={"X-Request-ID": "health-contract"})
     assert health.status_code == 200

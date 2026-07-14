@@ -1,0 +1,80 @@
+# Blueprint Render: API + worker + Postgres desde este mismo repositorio GitHub.
+# Dashboard Render → New → Blueprint → conectar HCHAPS404/Proyecto-PRORA
+#
+# Tras el deploy:
+# 1. Copie la URL del servicio web (https://….onrender.com)
+# 2. En GitHub → Settings → Variables → PRORA_API_BASE_URL=https://….onrender.com/api/v1
+# 3. Actions → "Publicar frontend en GitHub Pages" → Run workflow
+# 4. En Render, ejecute un one-off: docker-entrypoint migrate (o Job con CMD migrate)
+
+databases:
+  - name: prora-db
+    plan: free
+    postgresMajorVersion: "16"
+
+services:
+  - type: web
+    name: prora-api
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    dockerCommand: api
+    healthCheckPath: /ready
+    envVars:
+      - key: PRORA_ENVIRONMENT
+        value: production
+      - key: PRORA_AUTO_CREATE_TABLES
+        value: "false"
+      - key: PRORA_CORS_ORIGINS
+        value: '["https://hchaps404.github.io"]'
+      - key: PRORA_JWT_SECRET
+        generateValue: true
+      - key: PRORA_DATABASE_URL
+        fromDatabase:
+          name: prora-db
+          property: connectionString
+      - key: PRORA_MODEL_REGISTRY_PATH
+        value: /app/artifacts/models
+      - key: PRORA_INSTITUTIONAL_UPLOAD_DIR
+        value: /app/data/inbox
+      - key: PRORA_RAW_SNAPSHOT_DIR
+        value: /app/data/raw
+      - key: PRORA_SOCRATA_APP_TOKEN
+        sync: false
+
+  - type: worker
+    name: prora-worker
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    dockerCommand: worker
+    envVars:
+      - key: PRORA_ENVIRONMENT
+        value: production
+      - key: PRORA_AUTO_CREATE_TABLES
+        value: "false"
+      - key: PRORA_CORS_ORIGINS
+        value: '["https://hchaps404.github.io"]'
+      - key: PRORA_JWT_SECRET
+        fromService:
+          name: prora-api
+          type: web
+          envVarKey: PRORA_JWT_SECRET
+      - key: PRORA_DATABASE_URL
+        fromDatabase:
+          name: prora-db
+          property: connectionString
+      - key: PRORA_MODEL_REGISTRY_PATH
+        value: /app/artifacts/models
+      - key: PRORA_INSTITUTIONAL_UPLOAD_DIR
+        value: /app/data/inbox
+      - key: PRORA_RAW_SNAPSHOT_DIR
+        value: /app/data/raw
+      - key: PRORA_SOCRATA_APP_TOKEN
+        sync: false
+      - key: PRORA_WORKER_POLL_SECONDS
+        value: "5"

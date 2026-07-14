@@ -149,6 +149,15 @@ conectores públicos verificados se documentan en
   2018–2022 como historia no actual. El conector público de microdatos 2024
   descarga XLSX por evento, calcula su huella, agrega de inmediato por
   municipio/semana y elimina el archivo temporal: nunca persiste filas nominales.
+- La federación `sivigila-territorial-open` suma publicaciones abiertas
+  (Boyacá, Caquetá, Pereira, Tuluá, Bucaramanga multi-evento/IRA, Casanare,
+  Santa Rosa de Cabal) con series tipicamente 2015–2025. También se integran
+  IRCA (`nxt2-39c3`) y PAI Valle (`uw8e-gzpp`) como factores. Extiende
+  trazabilidad local sin declarar cobertura nacional operativa 2026.
+- Backend en el mismo GitHub: imagen Docker en **GHCR**
+  (workflow `backend-ghcr.yml`) + Blueprint **Render** (`render.yaml`)
+  conectado a Pages vía `PRORA_API_BASE_URL`. Guía:
+  [docs/backend-deploy.md](docs/backend-deploy.md).
 - El Boletín Epidemiológico Semanal (BES) se ingiere como referencia reciente
   departamental/distrital/nacional separada. No se convierte en casos municipales
   ni se usa para fabricar una capa operativa donde no existe una serie tabular.
@@ -184,6 +193,8 @@ python -m app.cli create-operator --email operador@entidad.gov.co --role admin -
 
 - [Arquitectura](docs/architecture.md)
 - [Despliegue y operación](docs/deployment.md)
+- [GitHub Pages](docs/github-deploy.md)
+- [Backend público + Pages](docs/backend-deploy.md)
 - [Seguridad y privacidad](docs/security.md)
 - [Fuentes de datos](backend/docs/data-sources.md)
 - [Backend](backend/README.md)

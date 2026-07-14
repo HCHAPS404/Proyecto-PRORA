@@ -1,0 +1,78 @@
+name: Publicar backend en GitHub Container Registry
+
+# Pages no puede ejecutar FastAPI. Este workflow publica la imagen del API/worker
+# en GHCR para que el mismo repositorio sirva frontend (Pages) + backend (imagen).
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-ghcr.yml"
+      - "docker-compose.yml"
+      - "docker-compose.prod.yml"
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: backend-ghcr-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  IMAGE_NAME: prora-api
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Metadatos de imagen
+        id: meta
+        run: |
+          owner_lc="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
+          repo_lc="$(echo '${{ github.event.repository.name }}' | tr '[:upper:]' '[:lower:]')"
+          echo "owner_lc=$owner_lc" >> "$GITHUB_OUTPUT"
+          echo "repo_lc=$repo_lc" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/${owner_lc}/${repo_lc}-${{ env.IMAGE_NAME }}" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Login a GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build y push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          build-args: |
+            PRORA_EXTRAS=ml,lstm,explainability
+          tags: |
+            ${{ steps.meta.outputs.image }}:latest
+            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.short_sha }}
+            ${{ steps.meta.outputs.image }}:main
+
+      - name: Resumen
+        run: |
+          {
+            echo "### Backend en GitHub (GHCR)"
+            echo ""
+            echo "La UI sigue en **GitHub Pages**. El backend se publica como imagen Docker:"
+            echo ""
+            echo "- \`${{ steps.meta.outputs.image }}:latest\`"
+            echo "- \`${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.short_sha }}\`"
+            echo ""
+            echo "Paquetes: https://github.com/${{ github.repository }}/pkgs/container/${{ steps.meta.outputs.repo_lc }}-${{ env.IMAGE_NAME }}"
+            echo ""
+            echo "Siguiente paso: desplegar con [render.yaml](../blob/main/render.yaml) o"
+            echo "\`docker compose -f docker-compose.yml -f docker-compose.ghcr.yml\`."
+            echo "Luego defina la variable \`PRORA_API_BASE_URL\` y republicar Pages."
+          } >> "$GITHUB_STEP_SUMMARY"
