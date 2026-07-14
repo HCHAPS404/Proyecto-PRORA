@@ -1,235 +1,232 @@
 # PRORA
 
-PRORA es una plataforma full stack de alerta temprana para apoyar la vigilancia
-de dengue, malaria, chikunguña, Zika, leishmaniasis e infecciones respiratorias
-agudas (IRA) en Colombia. Integra datos municipales agregados, pronósticos a
-3–4 semanas, explicabilidad, alertas, autenticación y un asistente analítico.
+Sistema de apoyo a la vigilancia epidemiológica en Colombia para dengue, malaria,
+chikunguña, Zika, leishmaniasis e IRA. Trabaja con series agregadas por municipio
+y semana, genera pronósticos a 3–4 semanas, muestra explicabilidad y gestiona
+alertas. No diagnostica y no almacena datos clínicos individuales.
 
-> PRORA es una herramienta de apoyo epidemiológico. No diagnostica, no sustituye
-> al INS ni a las autoridades territoriales y no debe recibir datos clínicos
-> individualizados. Una predicción solo puede considerarse operativa después de
-> validación temporal, territorial y epidemiológica con datos autorizados.
+Stack: React (Vite) + FastAPI + PostgreSQL/PostGIS (SQLite en desarrollo) +
+worker de ingesta/entrenamiento + modelos ensemble (RF, HGB, LSTM opcional).
 
-## Componentes
+## Enlaces del repositorio
 
-- **Frontend:** React 18, TypeScript y Vite; dashboard, mapas, análisis histórico,
-  predicciones, alertas, configuración, ayuda y agente PRORA.
-- **API:** FastAPI asíncrona con OpenAPI, JWT de acceso/renovación, preferencias,
-  fuentes, riesgo, modelos, alertas y suscripciones.
-- **Datos:** PostgreSQL/PostGIS, contratos canónicos, trazabilidad, calidad y
-  conectores para fuentes públicas o archivos institucionales.
-- **Modelos:** ingeniería de rezagos, validación temporal y territorial, Random
-  Forest, HistGradientBoosting, modelo secuencial LSTM cuando PyTorch está
-  instalado y stacking; el candidato con mejor MAE fuera de muestra se registra
-  como predictor de la versión, con intervalos, benchmark y explicabilidad.
-- **Operación:** migraciones Alembic, worker desacoplado, contenedores,
-  comprobaciones de salud, snapshots inmutables y proxy Nginx.
-
-La arquitectura completa está en [docs/architecture.md](docs/architecture.md).
-
-## GitHub (Pages + Actions)
-
-| Recurso | Enlace |
+| Recurso | URL |
 | --- | --- |
-| Repositorio | https://github.com/HCHAPS404/Proyecto-PRORA |
-| Sitio (GitHub Pages) | https://hchaps404.github.io/Proyecto-PRORA/ |
-| Inicio | https://hchaps404.github.io/Proyecto-PRORA/#/inicio |
-| Panorama | https://hchaps404.github.io/Proyecto-PRORA/#/panorama |
-| Imagen backend (GHCR) | https://github.com/HCHAPS404/Proyecto-PRORA/pkgs/container/proyecto-prora-api |
+| Código | https://github.com/HCHAPS404/Proyecto-PRORA |
+| Frontend en GitHub Pages | https://hchaps404.github.io/Proyecto-PRORA/ |
 | Actions | https://github.com/HCHAPS404/Proyecto-PRORA/actions |
+| Imagen Docker (GHCR) | https://github.com/HCHAPS404/Proyecto-PRORA/pkgs/container/proyecto-prora-api |
 
-### Qué muestra el enlace de GitHub Pages
+**Sobre GitHub Pages:** ese enlace publica solo el frontend. La API, el worker y
+la base de datos no corren en Pages. Para usar mapa, fuentes y predicciones hace
+falta el backend (en PC o en un host como Render) y la variable
+`PRORA_API_BASE_URL`.
 
-El enlace de Pages es la **vitrina del frontend** (UI, navegación, paneles).  
-**No** es un despliegue full-stack: GitHub Pages no ejecuta FastAPI, worker ni base de datos.
+## Instalación en Windows (desarrollo local)
 
-| Escenario | Qué obtener |
-| --- | --- |
-| Solo ver la interfaz | Abrir el sitio Pages |
-| Demo funcional completa (datos, mapa, predicciones) | API + worker en PC (o Render) y conectar Pages con `PRORA_API_BASE_URL` |
-| Desarrollo / defensa en máquina local | Seguir la sección **Arranque local** abajo |
+### Requisitos
 
-Guías:
-- Frontend en GitHub: [docs/github-deploy.md](docs/github-deploy.md)
-- Backend (PC, GHCR, Render): [docs/backend-deploy.md](docs/backend-deploy.md)
+- Node.js 22+ y pnpm 9 (`corepack enable`)
+- Python 3.11 o 3.12
+- Git
+- (Opcional) Docker Desktop, si prefiere Compose en lugar de SQLite
 
-Sin `PRORA_API_BASE_URL` el sitio queda en modo invitado. Con esa variable (y CORS)
-apunta a su API HTTPS.
-
-Para activar **alerta temprana operativa** (mapa/alertas vigentes) se requiere
-SIVIGILA municipal reciente (≤35 días) y `scripts/operational-bootstrap.ps1`.
-Los datos públicos actuales no cubren un SIVIGILA nacional 2025–2026 completo; el
-portfolio puede permanecer en `research_only` hasta un corte autorizado reciente.
-
-## Inicio rápido con Docker
-
-Requisitos: Docker Engine con Compose v2 y, para la imagen completa, espacio
-suficiente para las dependencias científicas y PyTorch.
+### Paso 1 — Clonar
 
 ```powershell
-Copy-Item .env.example .env
-# Cambie POSTGRES_PASSWORD y PRORA_JWT_SECRET antes de exponer el servicio.
-docker compose up --build
+git clone https://github.com/HCHAPS404/Proyecto-PRORA.git
+cd Proyecto-PRORA
 ```
 
-Para un despliegue más cercano a producción (sin exponer PostgreSQL ni la API;
-solo Nginx en el puerto web, con proxy de `/api/`):
+### Paso 2 — Frontend
 
 ```powershell
-# En .env: PRORA_ENVIRONMENT=production y secretos reales.
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
-```
-
-Servicios:
-
-- Aplicación: `http://localhost:8080`
-- API: `http://localhost:8000/api/v1`
-- OpenAPI: `http://localhost:8000/docs`
-- Salud: `http://localhost:8000/health`
-
-Detener sin borrar los datos:
-
-```powershell
-docker compose down
-```
-
-Para borrar también volúmenes locales, use `docker compose down --volumes` solo
-cuando haya confirmado que no necesita la base, archivos institucionales ni
-snapshots crudos o artefactos de modelos.
-
-## Demo completa en PC (recomendado para probar que todo funciona)
-
-GitHub Pages **no** sustituye este paso. En su máquina arranca API + worker + UI:
-
-```powershell
-# Primera vez (dependencias)
 corepack enable
 pnpm install --frozen-lockfile
+```
+
+### Paso 3 — Backend
+
+```powershell
 cd backend
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -e ".[dev,ml]"
+# Opcional: LSTM y SHAP
+# pip install -e ".[dev,ml,lstm,explainability]"
 cd ..
+```
 
-# Cada vez que quiera la demo funcional (desde la raíz del repo)
+### Paso 4 — Arrancar todo (API + worker + UI)
+
+```powershell
 npm run dev:full
 ```
 
-La API usa por defecto SQLite en `backend/prora.db` (cwd del proceso backend).
-Si define `PRORA_DATABASE_URL`, hágalo relativo a `backend/` o con ruta absoluta.
-
-Abra:
+Eso ejecuta `scripts/dev.ps1`: API en `:8000`, worker y Vite en `:5173` con
+`VITE_API_BASE_URL=http://127.0.0.1:8000/api/v1`.
 
 | Servicio | URL |
 | --- | --- |
-| Frontend | http://127.0.0.1:5173/ |
-| API (docs) | http://127.0.0.1:8000/docs |
-| Salud | http://127.0.0.1:8000/ready |
+| UI | http://127.0.0.1:5173/ |
+| OpenAPI | http://127.0.0.1:8000/docs |
+| Ready | http://127.0.0.1:8000/ready |
 
-`npm run dev:full` (`scripts/dev.ps1`) inicia o reutiliza la API en `:8000`,
-levanta el **worker** (sync/train) y Vite con `VITE_API_BASE_URL` apuntando a
-esa API. Al cerrar Vite intenta detener lo que arrancó.
+Base por defecto: SQLite en `backend/prora.db`.
 
-Alternativa equivalente:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\local-demo.ps1
-```
-
-El modo SQLite facilita desarrollo y pruebas; producción usa PostgreSQL/PostGIS
-y Alembic. Para LSTM: `.[lstm]`; para SHAP: `.[explainability]`.
-
-### Modelos de predicción en local
-
-Las 6 enfermedades priorizadas tienen champions **h3 y h4** entrenados (modo
-`research_only` mientras el corte epidemiológico nacional no sea ≤ 35 días).
-El mapa y la analítica usan predicción retrospectiva de investigación cuando
-no hay señal operativa.
-
-## Verificación
-
-```powershell
-pnpm run lint
-pnpm run build
-cd backend
-ruff check app tests
-pytest
-alembic upgrade head
-```
-
-También puede validar la composición sin iniciar servicios:
-
-```powershell
-docker compose --env-file .env.example config --quiet
-```
-
-## Fuentes y credenciales
-
-El repositorio no incluye secretos ni datos epidemiológicos restringidos. Los
-conectores públicos verificados se documentan en
-[backend/docs/data-sources.md](backend/docs/data-sources.md). En particular:
-
-- IDEAM (precipitación, temperatura, humedad y estaciones), DIVIPOLA 2025 y
-  CNPV 2018 se consumen desde servicios públicos verificados y paginados.
-- SIVIGILA `4hyg-wa9d` aporta agregados municipio/semana 2007–2022; PRORA usa
-  2018–2022 como historia no actual. El conector público de microdatos 2024
-  descarga XLSX por evento, calcula su huella, agrega de inmediato por
-  municipio/semana y elimina el archivo temporal: nunca persiste filas nominales.
-- La federación `sivigila-territorial-open` suma publicaciones abiertas
-  (Boyacá, Caquetá, Pereira, Tuluá, Bucaramanga multi-evento/IRA, Casanare,
-  Santa Rosa de Cabal) con series tipicamente 2015–2025. También se integran
-  IRCA (`nxt2-39c3`) y PAI Valle (`uw8e-gzpp`) como factores. Extiende
-  trazabilidad local sin declarar cobertura nacional operativa 2026.
-- Backend en el mismo GitHub: imagen Docker en **GHCR**
-  (workflow `backend-ghcr.yml`) + Blueprint **Render** (`render.yaml`)
-  conectado a Pages vía `PRORA_API_BASE_URL`. Guía:
-  [docs/backend-deploy.md](docs/backend-deploy.md).
-- El Boletín Epidemiológico Semanal (BES) se ingiere como referencia reciente
-  departamental/distrital/nacional separada. No se convierte en casos municipales
-  ni se usa para fabricar una capa operativa donde no existe una serie tabular.
-- PAI incluye la tabla departamental pública 2019–2022 y ZIP municipales
-  oficiales 1998–2025 y 2026, con SHA-256 y adaptador XLSX versionado.
-- Deforestación sigue bloqueada hasta aprobar el contrato geoespacial y unidad.
-
-Copie `.env.example` a `.env` y proporcione solamente las credenciales necesarias.
-El agente funciona sin proveedor externo; `PRORA_OPENAI_API_KEY` es opcional.
-
-Los archivos oficiales o institucionales se cargan sin datos personales desde
-`POST /api/v1/sources/{source_id}/upload`. Antes puede descargar la plantilla
-canónica en `GET /api/v1/sources/templates/{dataset_type}`. La API encola la
-ingesta; el worker recalcula el checksum, archiva el original con manifiesto,
-valida esquema, DIVIPOLA y rangos, y persiste cuarentena. El inventario público
-`GET /api/v1/sources/inventory` separa catálogo de almacenamiento real. Después,
-un analista puede solicitar entrenamiento en
-`POST /api/v1/models/train` y seguir el trabajo por su identificador.
-
-`GET /api/v1/sources/disease-coverage` informa, por cada enfermedad priorizada,
-el periodo observado, fuentes, modelos champion, pronósticos históricos,
-pronósticos operativos, alertas abiertas y bloqueos. Un modelo entrenado con
-un corte histórico nunca se publica como señal actual.
-
-No existe un administrador por defecto. El primer operador se crea explícitamente:
+### Paso 5 — Operador (solo si va a sincronizar o entrenar por API)
 
 ```powershell
 cd backend
+.\.venv\Scripts\Activate.ps1
 python -m app.cli create-operator --email operador@entidad.gov.co --role admin --full-name "Operador PRORA"
 ```
 
-## Documentación de entrega
+La contraseña se pide por consola (no va en el historial del comando).
 
-- [Arquitectura](docs/architecture.md)
-- [Despliegue y operación](docs/deployment.md)
-- [GitHub Pages](docs/github-deploy.md)
-- [Backend público + Pages](docs/backend-deploy.md)
-- [Seguridad y privacidad](docs/security.md)
-- [Fuentes de datos](backend/docs/data-sources.md)
-- [Backend](backend/README.md)
-- [Plataforma de ML](backend/app/ml/README.md)
+### Paso 6 — Comprobar
 
-## Estado de preparación
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/ready
+Invoke-RestMethod http://127.0.0.1:8000/api/v1/sources | Select-Object -First 3 id,status
+pnpm run lint
+cd backend; pytest
+```
 
-El software, contratos, modelos y despliegue son integrables con un entorno de
-producción. La activación epidemiológica final depende de cargar series históricas
-oficiales, ejecutar el backfill, entrenar por enfermedad, aprobar los umbrales con
-expertos y completar pruebas de carga, recuperación y seguridad en la
-infraestructura de destino.
+Guía ampliada: [docs/INSTALL.md](docs/INSTALL.md).
+
+## Instalación con Docker
+
+```powershell
+Copy-Item .env.example .env
+# Edite POSTGRES_PASSWORD y PRORA_JWT_SECRET
+docker compose up --build
+```
+
+- App (Nginx): http://localhost:8080  
+- API directa: http://localhost:8000/api/v1  
+
+Casi producción (solo puerto web, API detrás de Nginx):
+
+```powershell
+# En .env: PRORA_ENVIRONMENT=production y secretos reales
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
+```
+
+## Despliegue
+
+Hay tres capas distintas. No las mezcle:
+
+```mermaid
+flowchart TB
+  subgraph github [GitHub]
+    CODE[Código en main]
+    PAGES[Pages = solo frontend]
+    GHCR[GHCR = imagen API/worker]
+  end
+  subgraph runtime [Donde corre el backend]
+    PC[PC local]
+    RENDER[Render / VPS]
+  end
+  CODE --> PAGES
+  CODE --> GHCR
+  GHCR --> RENDER
+  CODE --> PC
+  PAGES -.->|PRORA_API_BASE_URL| RENDER
+  PAGES -.->|PRORA_API_BASE_URL| PC
+```
+
+### A) Frontend en GitHub Pages
+
+1. En el repo: **Settings → Pages → Source → GitHub Actions**
+2. En **Actions**, ejecute *Publicar frontend en GitHub Pages* (o haga push a `main`)
+3. Abra `https://hchaps404.github.io/Proyecto-PRORA/`
+
+Sin API remota el sitio abre en modo invitado: UI sí, predicciones en vivo no.
+
+Detalle: [docs/github-deploy.md](docs/github-deploy.md).
+
+### B) Backend en PC (demo / defensa)
+
+```powershell
+npm run dev:full
+```
+
+Luego cree el operador, sincronice fuentes y entrene (pasos 5–8 de
+[docs/INSTALL.md](docs/INSTALL.md)).
+
+### C) Backend público + Pages conectado (ruta recomendada)
+
+Orden fijo; no salte el paso de migraciones ni el de la variable de Pages.
+
+| Paso | Acción | Resultado |
+| --- | --- | --- |
+| 1 | Push a `main` (o Run workflow *Publicar backend en GHCR*) | Imagen en `ghcr.io/hchaps404/proyecto-prora-api` |
+| 2 | [Render](https://dashboard.render.com/) → **New → Blueprint** → este repo | Lee `render.yaml` (API + worker + Postgres) |
+| 3 | Shell del servicio web → `./docker-entrypoint.sh migrate` | Esquema listo |
+| 4 | Copie la URL HTTPS de la API (ej. `https://….onrender.com`) | Backend público |
+| 5 | GitHub → **Settings → Secrets and variables → Actions → Variables** → `PRORA_API_BASE_URL=https://SU-API/api/v1` | Front sabe a dónde llamar |
+| 6 | CORS en la API: `PRORA_CORS_ORIGINS=["https://hchaps404.github.io"]` | El navegador no bloquea |
+| 7 | Actions → *Publicar frontend en GitHub Pages* | Build con la URL correcta |
+| 8 | Login operador en esa API → sync + train | Datos y champions |
+
+Alternativa VPS (misma imagen GHCR):
+
+```powershell
+$env:PRORA_GHCR_IMAGE = "ghcr.io/hchaps404/proyecto-prora-api:latest"
+docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.ghcr.yml up -d
+```
+
+Pasos completos, checklist y límites del plan free:
+[docs/backend-deploy.md](docs/backend-deploy.md) y
+[docs/github-deploy.md](docs/github-deploy.md).
+
+Diseño del sistema (componentes, secuencia, UML):
+[docs/architecture.md](docs/architecture.md) · [docs/uml.md](docs/uml.md) ·
+[docs/README.md](docs/README.md).
+## Sincronizar datos y entrenar (resumen)
+
+Con API y worker activos e iniciada sesión de operador:
+
+```powershell
+# Ejemplo: federación territorial abierta
+Invoke-RestMethod -Method POST `
+  -Uri "http://127.0.0.1:8000/api/v1/sources/sivigila-territorial-open/sync" `
+  -Headers @{ Authorization = "Bearer $TOKEN" } `
+  -ContentType "application/json" -Body "{}"
+
+# Entrenamiento por enfermedad
+Invoke-RestMethod -Method POST `
+  -Uri "http://127.0.0.1:8000/api/v1/models/train" `
+  -Headers @{ Authorization = "Bearer $TOKEN" } `
+  -ContentType "application/json" `
+  -Body '{"disease":"dengue","horizons":[3,4]}'
+```
+
+También: `scripts/operational-bootstrap.ps1`.
+
+Sin SIVIGILA municipal reciente (≤ 35 días) el sistema permanece en
+`research_only`: los modelos sirven para evaluación histórica, no como alerta
+operativa nacional.
+
+## Documentación
+
+| Documento | Contenido |
+| --- | --- |
+| [docs/INSTALL.md](docs/INSTALL.md) | Instalación detallada |
+| [docs/architecture.md](docs/architecture.md) | Arquitectura y flujos |
+| [docs/uml.md](docs/uml.md) | Diagramas UML (Mermaid) |
+| [docs/deployment.md](docs/deployment.md) | Operación y Compose |
+| [docs/github-deploy.md](docs/github-deploy.md) | Pages y Actions |
+| [docs/backend-deploy.md](docs/backend-deploy.md) | GHCR, Render, VPS |
+| [docs/security.md](docs/security.md) | Seguridad y privacidad |
+| [backend/docs/data-sources.md](backend/docs/data-sources.md) | Fuentes y contratos |
+| [backend/app/ml/README.md](backend/app/ml/README.md) | Pipeline ML |
+
+Índice: [docs/README.md](docs/README.md).
+
+## Licencia y uso
+
+El código del repositorio se entrega para evaluación y despliegue controlado.
+Los datos oficiales siguen las condiciones de cada entidad (INS, IDEAM, DANE,
+gobernaciones). No redistribuir microdatos nominales.

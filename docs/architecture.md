@@ -1,121 +1,216 @@
 # Arquitectura de PRORA
 
-## Objetivo y límites
+PRORA convierte series epidemiológicas agregadas (municipio × semana) en
+pronósticos a corto plazo y señales de riesgo para dengue, malaria, chikunguña,
+Zika, leishmaniasis e IRA. Separa lo observado, lo predicho y lo operativo. No
+guarda historias clínicas ni identifica pacientes.
 
-PRORA transforma series municipales agregadas en señales tempranas de riesgo para
-seis enfermedades priorizadas. Separa observaciones, pronósticos y decisiones
-operativas; conserva procedencia y versión del modelo para que cada alerta sea
-auditable. No almacena historias clínicas ni identifica pacientes.
+Los diagramas UML detallados están en [uml.md](uml.md).
 
-## Vista de componentes
+## Contexto
+
+```mermaid
+flowchart TB
+  Op[Operador] --> API[PRORA API + Worker]
+  Pub[Usuario UI] --> FE[Frontend React]
+  FE --> API
+  API --> Fuentes[datos.gov.co / DANE / IDEAM]
+  FE -. "build estático" .-> Pages[GitHub Pages]
+  Pages -.->|PRORA_API_BASE_URL| API
+```
+
+## Componentes
 
 ```mermaid
 flowchart LR
-    U["Ciudadanía y equipos territoriales"] --> W["React + Nginx"]
-    W --> A["FastAPI /api/v1"]
-    A --> P[("PostgreSQL + PostGIS")]
-    A --> R["Registro de modelos"]
-    Q["Worker de ingesta y entrenamiento"] --> P
-    Q --> R
-    S["IDEAM, DANE y fuentes autorizadas"] --> Q
-    A -. "datos agregados opcionales" .-> L["Proveedor LLM"]
+  U[Usuarios] --> W[React + Vite / Nginx]
+  W --> A[FastAPI /api/v1]
+  A --> P[(PostgreSQL + PostGIS)]
+  A --> R[Registro de modelos]
+  Q[Worker] --> P
+  Q --> R
+  S[Conectores de fuentes] --> Q
+  A -. "opcional" .-> L[Proveedor LLM]
 ```
 
-| Capa | Responsabilidad | Implementación |
+| Capa | Qué hace | Tecnología |
 | --- | --- | --- |
-| Presentación | Mapa, histórico, predicciones, explicaciones, alertas y accesibilidad | React, TypeScript, Vite, Nginx |
-| API | Contratos, autenticación, autorización, validación y OpenAPI | FastAPI, Pydantic, SQLAlchemy async |
-| Persistencia | Usuarios, fuentes, observaciones, geometría, modelos, pronósticos y auditoría | PostgreSQL 16, PostGIS, Alembic |
-| Ingesta | Descarga paginada, normalización, DIVIPOLA, calidad y procedencia | Conectores y contratos Python |
-| ML | Features, validación, entrenamiento, ensemble, inferencia y explicabilidad | pandas, scikit-learn, PyTorch opcional, SHAP opcional |
-| Operación | Migraciones, trabajo asíncrono, proxy, salud y volúmenes | Docker Compose, worker, Nginx |
+| Presentación | Mapa, series, predicciones, alertas | React, TypeScript, Vite, Nginx |
+| API | Auth, validación, OpenAPI | FastAPI, Pydantic, SQLAlchemy async |
+| Persistencia | Territorios, series, jobs, modelos, auditoría | Postgres 16 + PostGIS (SQLite en dev) |
+| Ingesta | Descarga, normalización, DIVIPOLA, procedencia | Conectores en `backend/app/connectors` |
+| ML | Features, train, stacking, inferencia | scikit-learn, PyTorch opcional, SHAP opcional |
+| Operación | Migraciones, cola, proxy, salud | Docker Compose, worker, Nginx |
+
+## Contenedores en despliegue típico
+
+```mermaid
+flowchart TB
+  subgraph edge [Entrada]
+    NGX[Nginx :8080]
+  end
+  subgraph app [Aplicación]
+    API[uvicorn API :8000]
+    WRK[Worker]
+  end
+  subgraph data [Datos]
+    PG[(Postgres + PostGIS)]
+    VOL[Volumen artefactos ML]
+  end
+
+  NGX --> API
+  API --> PG
+  WRK --> PG
+  API --> VOL
+  WRK --> VOL
+```
+
+En desarrollo local sin Docker: API y worker apuntan a `sqlite+aiosqlite` y el
+frontend a `http://127.0.0.1:8000/api/v1`.
 
 ## Flujo de datos
 
-1. Un conector consulta una fuente pública o recoge un archivo institucional
-   autorizado. Se guarda URL o referencia, fecha de extracción, esquema y huella.
-2. La capa de ingesta valida tipos, rango temporal, DIVIPOLA, duplicados,
-   completitud y consistencia territorial antes de publicar datos canónicos.
-3. Las series se agregan a municipio y semana epidemiológica. Variables con otra
-   periodicidad se alinean sin utilizar información futura.
-4. El worker construye rezagos, estacionalidad y variables estructurales; ejecuta
-   validación temporal con ventana expansiva y pruebas territoriales fuera de
-   muestra.
-5. El registro conserva artefacto, configuración, métricas, periodo de
-   entrenamiento y checksum. Solo una versión aprobada debe promoverse a activa.
-6. La API sirve observaciones y pronósticos por separado, junto con horizonte,
-   incertidumbre, impulsores y versión del modelo.
+```mermaid
+flowchart TD
+  A[Fuente externa] --> B[Conector]
+  B --> C{Validación}
+  C -->|OK| D[Upsert canónico]
+  C -->|Error| E[SyncRun failed]
+  D --> F[Serie municipio-semana]
+  F --> G[Feature store]
+  G --> H[Train / Inferencia]
+  H --> I[Predictions]
+  I --> J[Alerts]
+  J --> K[API de lectura / UI]
+```
+
+Pasos en texto:
+
+1. El conector descarga o consulta la fuente y guarda URL, fecha, esquema y huella.
+2. Se validan tipos, rango temporal, DIVIPOLA, duplicados y completitud.
+3. Las series quedan en municipio × semana epidemiológica; el clima y factores
+   se alinean sin usar información futura.
+4. El worker arma rezagos y variables estructurales; entrena o infiere.
+5. El registro guarda artefacto, métricas y checksum. Solo un champion promovido
+   alimenta predicciones “oficiales” del sistema.
+6. La API expone observaciones y pronósticos por separado (horizonte, banda,
+   versión del modelo).
+
+## Secuencia resumida: sync → train → mapa
+
+```mermaid
+sequenceDiagram
+  participant Op as Operador
+  participant API as FastAPI
+  participant W as Worker
+  participant DB as DB
+  participant UI as Frontend
+
+  Op->>API: POST /sources/{id}/sync
+  API->>DB: Job + SyncRun
+  W->>DB: claim
+  W->>DB: upsert series
+  Op->>API: POST /models/train
+  W->>DB: ModelRun + artifact
+  Op->>API: promote champion
+  UI->>API: GET /risk/map
+  API->>DB: predictions + alerts
+  API-->>UI: mapa
+```
 
 ## Estrategia de predicción
 
-- **Random Forest:** interacciones no lineales entre clima, vacunación,
-  deforestación e indicadores estructurales.
-- **Modelo secuencial:** LSTM cuando está disponible PyTorch, con ventanas de
-  12–24 semanas y rezagos climáticos; el paquete mantiene una alternativa lineal
-  explícita para entornos livianos, nunca etiquetada como LSTM.
-- **Ensemble:** combina predictores base con datos exclusivamente anteriores al
-  punto de evaluación. Los pesos y el método quedan en el manifiesto del modelo.
-- **Validación:** MAE/RMSE para conteos o tasas y AUC, sensibilidad, especificidad,
-  calibración y desempeño por territorio para niveles de riesgo.
+```mermaid
+flowchart LR
+  X[Features históricas] --> RF[Random Forest]
+  X --> HGB[HistGradientBoosting]
+  X --> SEQ[LSTM o Ridge]
+  RF --> ST[Stacking]
+  HGB --> ST
+  SEQ --> ST
+  ST --> Y[Pronóstico h=3,4]
+  Y --> M[MAE / MAPE / chequeos]
+  M --> CH{¿Mejor que champion?}
+  CH -->|Sí| P[Promover]
+  CH -->|No| K[Conservar]
+```
 
-Un artefacto entrenado no equivale a un modelo epidemiológicamente aprobado. La
-promoción requiere revisión de fugas temporales, calibración, deriva, desempeño
-por subgrupos territoriales y utilidad operativa.
+- **Random Forest / HGB:** interacciones entre clima, vacunación, calidad del
+  agua e indicadores estructurales.
+- **Secuencial:** LSTM si hay PyTorch; si no, Ridge sobre la misma ventana.
+  Nunca se etiqueta Ridge como LSTM.
+- **Validación:** solo pasado respecto al punto de corte; MAE/RMSE en conteos o
+  tasas; revisión por territorio cuando hay muestra suficiente.
 
-## Contratos principales
+Un artefacto entrenado no es por sí solo un modelo operativo. La promoción pide
+revisar fugas temporales, calibración y utilidad en campo.
 
-La especificación vigente se publica en `/api/v1/openapi.json`. Los dominios
-principales son:
+## Contratos de API
 
-- `/auth`, `/preferences`: identidad, sesión y preferencias.
-- `/risk`, `/models`: mapa, detalle municipal, histórico, explicación, metadatos
-  y solicitudes de entrenamiento.
-- `/sources`: catálogo, estado de conectores, sincronización y ejecuciones.
-- `/alerts`, `/subscriptions`: reglas y preferencias de suscripción.
-- `/notifications`: bandeja in-app y trazabilidad de cada canal evaluado.
-- `/agent/query`: respuestas apoyadas solo en hechos agregados recuperados.
-- `/health`, `/ready`: vida del proceso y disponibilidad de dependencias.
+Especificación viva: `/api/v1/openapi.json` (también `/docs` con Swagger).
 
-Los errores siguen un sobre estable con código, mensaje, detalles y `request_id`.
+| Prefijo | Dominio |
+| --- | --- |
+| `/auth`, `/preferences` | Sesión y preferencias |
+| `/risk`, `/models` | Mapa, detalle, histórico, train, readiness |
+| `/sources` | Catálogo, sync, corridas |
+| `/alerts`, `/subscriptions` | Reglas y suscripciones |
+| `/notifications` | Bandeja in-app |
+| `/agent/query` | Consultas sobre hechos agregados |
+| `/health`, `/ready` | Liveness / readiness |
 
-El worker evalúa de forma idempotente las reglas habilitadas solo contra alertas
-abiertas con pronósticos marcados como operativamente elegibles. El canal
-`in_app` se registra como `delivered`; `email`, `push` y `webhook` se registran
-como `unsupported` con `provider_not_configured` hasta integrar un proveedor
-real. Una preferencia guardada nunca se presenta como un mensaje enviado.
+Errores: sobre con `code`, `message`, `details` y `request_id`.
 
-El mismo worker revisa cada cinco minutos los `refresh_cron` del catálogo y
-encola una sola sincronización cuando el último intento es anterior al corte
-programado. La ejecución conserva `scheduled_for` y la solicitud normalizada en
-su procedencia; una fuente deshabilitada, pendiente de configuración o con un
-trabajo ya activo nunca se encola automáticamente.
+## Jobs y notificaciones
 
-## Fuentes oficiales y honestidad operacional
+```mermaid
+stateDiagram-v2
+  [*] --> pending
+  pending --> running
+  running --> succeeded
+  running --> failed
+```
 
-- El [portal SIVIGILA del INS](https://portalsivigila.ins.gov.co/Paginas/Vigilancia-Rutinaria.aspx)
-  publica productos de vigilancia, pero el acceso a microdatos se gestiona a
-  través del [buscador y solicitud del INS](https://portalsivigila.ins.gov.co/buscador).
-- IDEAM publica conjuntos abiertos como
-  [precipitación](https://www.datos.gov.co/Ambiente-y-Desarrollo-Sostenible/Precipitaci-n/s54a-sgyg)
-  y [datos de estaciones](https://www.datos.gov.co/en/Ambiente-y-Desarrollo-Sostenible/Datos-de-Estaciones-de-IDEAM-y-de-Terceros/57sv-p2fu/data).
-- La división territorial se obtiene del
-  [servicio oficial DIVIPOLA de DANE](https://geoportal.dane.gov.co/mparcgis/rest/services/Divipola/Serv_DIVIPOLA_MGN_2024/FeatureServer).
-- Los indicadores del CNPV se documentan en el
-  [catálogo de microdatos DANE](https://microdatos.dane.gov.co/catalog/643).
-- La deforestación se contrasta con el
-  [Sistema de Monitoreo de Bosques y Carbono del IDEAM](https://www.ideam.gov.co/nuestra-entidad/ecosistemas-e-informacion-ambiental/sistema-monitoreo-bosques-carbono).
+El worker:
 
-Cuando una entidad no ofrece un API nacional estable, PRORA marca la fuente como
-`requires_configuration`; no sustituye el dato con un conjunto regional ni con
-una URL supuesta.
+- reclama jobs de sync y train de forma idempotente;
+- evalúa reglas de alerta solo contra pronósticos elegibles;
+- canal `in_app` → `delivered`; `email` / `push` / `webhook` → `unsupported`
+  hasta que haya proveedor real;
+- cada ~5 minutos revisa `refresh_cron` del catálogo y encola sync si corresponde.
+
+## Fuentes y honestidad operacional
+
+- SIVIGILA nacional microdato reciente no siempre tiene API pública estable; el
+  portal INS gestiona solicitudes.
+- La federación `sivigila-territorial-open` une conjuntos municipales abiertos
+  (Boyacá, Caquetá, Pereira, Tuluá, Bucaramanga, Casanare, etc.).
+- DIVIPOLA viene del servicio DANE; clima e IRCA de datos.gov.co / IDEAM cuando
+  el conector está habilitado.
+
+Si falta API nacional o archivo autorizado, la fuente queda en
+`requires_configuration`. No se inventan URLs ni se sustituye con un dataset
+regional sin marcar el alcance.
+
+Sin SIVIGILA municipal con corte ≤ 35 días el portfolio permanece en
+`research_only`: útil para evaluación histórica, no como alerta operativa nacional.
 
 ## Decisiones de despliegue
 
-- El frontend usa `/api/v1` en el mismo origen y Nginx lo enruta a FastAPI, lo
-  que reduce configuración CORS y evita exponer topología interna.
-- Las migraciones corren una vez antes de API y worker.
-- API y worker comparten artefactos de modelos y bandeja institucional mediante
-  volúmenes; los archivos originales deben moverse luego a almacenamiento de
-  objetos con retención y cifrado en un despliegue administrado.
-- La base no se publica en producción. El puerto del Compose es solo para
-  desarrollo local y debe eliminarse o restringirse en el manifiesto final.
+```mermaid
+flowchart TB
+  Repo[Repo GitHub] --> Pages[Pages: SPA]
+  Repo --> GHCR[GHCR: imagen API/worker]
+  GHCR --> Host[Render o VPS]
+  Host --> PG[(Postgres)]
+  Pages -->|PRORA_API_BASE_URL| Host
+```
+
+- En Compose, Nginx sirve el front y hace proxy de `/api/v1` a FastAPI (menos
+  fricción CORS).
+- Migraciones corren una vez (`migrate`) antes de API y worker.
+- API y worker comparten volumen de artefactos ML.
+- La base no se publica a internet en producción.
+
+Guías: [INSTALL.md](INSTALL.md), [backend-deploy.md](backend-deploy.md),
+[github-deploy.md](github-deploy.md), [uml.md](uml.md).
