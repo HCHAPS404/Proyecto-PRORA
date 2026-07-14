@@ -1,0 +1,34 @@
+# Superpone el compose base para un despliegue cercano a producción.
+# Uso:
+#   Copy-Item .env.example .env   # edite secretos y PRORA_ENVIRONMENT=production
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
+#
+# No publica PostgreSQL ni la API en el host: el acceso externo es solo el
+# frontend (Nginx) en PRORA_WEB_PORT, que hace proxy de /api/.
+
+services:
+  db:
+    ports: !reset []
+    networks:
+      - prora
+
+  api:
+    ports: !reset []
+    environment:
+      PRORA_ENVIRONMENT: ${PRORA_ENVIRONMENT:-production}
+      PRORA_CORS_ORIGINS: '${PRORA_CORS_ORIGINS:-["http://localhost:8080"]}'
+      PRORA_AUTO_CREATE_TABLES: "false"
+
+  worker:
+    environment:
+      PRORA_ENVIRONMENT: ${PRORA_ENVIRONMENT:-production}
+      PRORA_AUTO_CREATE_TABLES: "false"
+
+  migrate:
+    environment:
+      PRORA_ENVIRONMENT: ${PRORA_ENVIRONMENT:-production}
+      PRORA_AUTO_CREATE_TABLES: "false"
+
+  frontend:
+    ports:
+      - "${PRORA_WEB_PORT:-8080}:8080"

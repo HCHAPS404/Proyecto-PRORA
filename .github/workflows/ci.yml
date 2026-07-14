@@ -1,0 +1,62 @@
+name: Validar build
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run lint
+      - run: pnpm run build
+        env:
+          VITE_API_BASE_URL: /api/v1
+
+  compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validar Compose base
+        run: docker compose --env-file .env.example config --quiet
+      - name: Validar Compose producción
+        run: >
+          docker compose
+          --env-file .env.example
+          -f docker-compose.yml
+          -f docker-compose.prod.yml
+          config --quiet
+
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Instalar API con extras de prueba
+        run: pip install -e ".[dev,ml]"
+      - name: Ruff
+        run: ruff check app tests
+      - name: Pytest
+        run: pytest
+        env:
+          PRORA_ENVIRONMENT: test

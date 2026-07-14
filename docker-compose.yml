@@ -1,0 +1,123 @@
+name: prora
+
+x-backend-environment: &backend-environment
+  PRORA_ENVIRONMENT: ${PRORA_ENVIRONMENT:-development}
+  PRORA_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-prora}:${POSTGRES_PASSWORD:-replace-before-production}@db:5432/${POSTGRES_DB:-prora}
+  PRORA_JWT_SECRET: ${PRORA_JWT_SECRET:-replace-this-development-key-with-at-least-32-characters}
+  PRORA_AUTO_CREATE_TABLES: "false"
+  PRORA_CORS_ORIGINS: '${PRORA_CORS_ORIGINS:-["http://localhost:8080"]}'
+  PRORA_LOG_LEVEL: ${PRORA_LOG_LEVEL:-INFO}
+  PRORA_SOCRATA_APP_TOKEN: ${PRORA_SOCRATA_APP_TOKEN:-}
+  PRORA_OPENAI_API_KEY: ${PRORA_OPENAI_API_KEY:-}
+  PRORA_OPENAI_MODEL: ${PRORA_OPENAI_MODEL:-gpt-5.4-mini}
+  PRORA_MODEL_REGISTRY_PATH: /app/artifacts/models
+  PRORA_INSTITUTIONAL_UPLOAD_DIR: /app/data/inbox
+  PRORA_RAW_SNAPSHOT_DIR: /app/data/raw
+
+x-backend: &backend
+  build:
+    context: ./backend
+    args:
+      PRORA_EXTRAS: ${PRORA_BACKEND_EXTRAS:-ml,lstm,explainability}
+  image: prora-api:${PRORA_IMAGE_TAG:-local}
+  restart: unless-stopped
+  environment: *backend-environment
+  volumes:
+    - model-artifacts:/app/artifacts/models
+    - institutional-inbox:/app/data/inbox
+    - raw-snapshots:/app/data/raw
+  networks:
+    - prora
+
+services:
+  db:
+    image: postgis/postgis:16-3.4-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-prora}
+      POSTGRES_USER: ${POSTGRES_USER:-prora}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-replace-before-production}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-prora} -d ${POSTGRES_DB:-prora}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - prora
+
+  migrate:
+    <<: *backend
+    restart: "no"
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    <<: *backend
+    ports:
+      - "${PRORA_API_PORT:-8000}:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3)"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  worker:
+    <<: *backend
+    command: ["python", "-m", "app.jobs.worker"]
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import pathlib,sys; sys.exit(0 if b'app.jobs.worker' in pathlib.Path('/proc/1/cmdline').read_bytes() else 1)",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  frontend:
+    build:
+      context: .
+      args:
+        VITE_API_BASE_URL: /api/v1
+    image: prora-frontend:${PRORA_IMAGE_TAG:-local}
+    restart: unless-stopped
+    ports:
+      - "${PRORA_WEB_PORT:-8080}:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - prora
+
+volumes:
+  postgres-data:
+  model-artifacts:
+  institutional-inbox:
+  raw-snapshots:
+
+networks:
+  prora:
+    driver: bridge

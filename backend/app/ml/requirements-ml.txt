@@ -1,0 +1,9 @@
+# Core ML dependencies (kept separate from the API runtime)
+numpy>=1.26,<3
+pandas>=2.1,<3
+scikit-learn>=1.4,<2
+joblib>=1.3,<2
+
+# Optional explainability and neural model extras. Install only where needed:
+# shap>=0.45,<1
+# torch>=2.2,<3
