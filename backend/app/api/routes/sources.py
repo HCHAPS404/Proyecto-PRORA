@@ -13,7 +13,6 @@ from fastapi import (
     File,
     Form,
     Query,
-    Request,
     Response,
     UploadFile,
     status,
@@ -167,9 +166,10 @@ async def download_template(dataset_type: DatasetType) -> Response:
 )
 async def upload_institutional_dataset(
     source_id: str,
-    request: Request,
     _: Operator,
     session: SessionDep,
+    background_tasks: BackgroundTasks,
+    settings: Annotated[Settings, Depends(get_runtime_settings)],
     dataset_type: Annotated[DatasetType, Form()],
     file: Annotated[UploadFile, File(description="Archivo CSV canónico sin datos personales")],
 ) -> IngestionRun:
@@ -180,7 +180,6 @@ async def upload_institutional_dataset(
     if Path(original_name).suffix.casefold() != ".csv":
         raise DomainError("unsupported_file_type", "La carga institucional admite CSV UTF-8", 415)
 
-    settings = request.app.state.settings
     target = await anyio.to_thread.run_sync(
         _prepare_upload_target, settings.institutional_upload_dir
     )
@@ -220,6 +219,8 @@ async def upload_institutional_dataset(
     session.add(run)
     await session.commit()
     await session.refresh(run)
+    if settings.jobs_inline:
+        background_tasks.add_task(run_ingestion_inline, run.id)
     return run
 
 

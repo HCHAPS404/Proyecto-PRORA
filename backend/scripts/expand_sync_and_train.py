@@ -23,6 +23,15 @@ from app.services.source_catalog import seed_source_catalog
 from app.services.source_sync import process_source_sync, schedule_source_sync
 
 SYNC_SOURCES = [
+    "dane-divipola",
+    "dane-socioeconomic",
+    "ideam-stations",
+    "ideam-precipitation",
+    "ideam-temperature",
+    "ideam-humidity",
+    "sivigila-national",
+    "sivigila-microdata-2024",
+    "sivigila-territorial-open",
     "sivigila-bucaramanga-events",
     "sivigila-bucaramanga-ira",
     "sivigila-santa-rosa-cabal-events",
@@ -32,8 +41,12 @@ SYNC_SOURCES = [
     "sivigila-tulua-dengue",
     "sivigila-caqueta-dengue",
     "sivigila-casanare-dengue",
-    "ins-irca-water-quality",
+    "ins-bes-weekly",
+    "pai-national",
+    "pai-municipal-history",
+    "pai-municipal-2026",
     "pai-valle-municipal",
+    "ins-irca-water-quality",
 ]
 
 DISEASES = ("dengue", "malaria", "chikunguna", "zika", "leishmaniasis", "ira")

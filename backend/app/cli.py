@@ -51,24 +51,42 @@ async def create_operator(
             if user is not None:
                 if not user.is_active:
                     raise OperatorCommandError("la cuenta existe pero está inactiva")
-                if user.role == role:
+                role_changed = user.role != role
+                if role_changed and not promote_existing:
+                    raise OperatorCommandError(
+                        "la cuenta ya existe; use --promote-existing para cambiar su rol"
+                    )
+                if role_changed:
+                    user.role = role
+                password_reset = False
+                # Bootstrap no interactivo (Render): permite rotar la clave del operador.
+                if password is not None and promote_existing:
+                    try:
+                        registration = RegisterRequest(
+                            email=normalized_email,
+                            full_name=full_name or user.full_name,
+                            password=password,
+                        )
+                    except ValidationError as exc:
+                        raise OperatorCommandError(str(exc)) from exc
+                    user.password_hash = hash_password(registration.password)
+                    if full_name:
+                        user.full_name = registration.full_name.strip()
+                    password_reset = True
+                if not role_changed and not password_reset:
                     return {
                         "status": "unchanged",
                         "email": user.email,
                         "role": user.role,
                         "created": False,
                     }
-                if not promote_existing:
-                    raise OperatorCommandError(
-                        "la cuenta ya existe; use --promote-existing para cambiar su rol"
-                    )
-                user.role = role
                 await session.commit()
                 return {
-                    "status": "promoted",
+                    "status": "promoted" if role_changed else "password_reset",
                     "email": user.email,
                     "role": user.role,
                     "created": False,
+                    "password_reset": password_reset,
                 }
 
             if full_name is None or password is None:

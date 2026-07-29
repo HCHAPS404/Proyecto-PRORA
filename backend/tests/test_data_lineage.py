@@ -144,6 +144,15 @@ def test_operator_cli_is_explicit_and_idempotent(settings: Settings) -> None:
             promote_existing=True,
         )
         assert promoted["status"] == "promoted"
+        reset = await create_operator(
+            settings,
+            email="operator@example.org",
+            role="admin",
+            password="SecureOperator123!",
+            promote_existing=True,
+        )
+        assert reset["status"] == "password_reset"
+        assert reset["password_reset"] is True
 
     asyncio.run(exercise())
 

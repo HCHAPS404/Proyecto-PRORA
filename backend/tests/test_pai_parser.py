@@ -16,7 +16,7 @@ def test_current_pai_uses_divipola_code_and_traces_legacy_name_aliases() -> None
     worksheet.cell(6, 6, "% DE TV AL AÑO DE EDAD")
 
     official: dict[str, str] = {}
-    for offset in range(1, 1123):
+    for offset in range(1, 1148):
         department = 1 if offset <= 999 else 2
         local_code = offset if offset <= 999 else offset - 999
         code = f"{department:02d}{local_code:03d}"
@@ -38,7 +38,7 @@ def test_current_pai_uses_divipola_code_and_traces_legacy_name_aliases() -> None
         official_municipalities=official,
     )
 
-    assert len(result.records) == 1122
+    assert len(result.records) == 1147
     assert not any(
         rejection.reason_code == "territory_cardinality_mismatch"
         for rejection in result.rejections

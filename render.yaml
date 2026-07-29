@@ -1,6 +1,7 @@
 # Blueprint Render (plan free): API + Postgres.
-# Los background workers NO admiten plan free en Render; el worker de ingesta/ML
-# corre embebido en el mismo servicio web (PRORA_EMBEDDED_WORKER=true).
+# Los background workers NO admiten plan free en Render; sync/train corren
+# inline en la API (PRORA_JOBS_INLINE=true). El worker embebido queda off
+# por defecto para no tumbar el health check.
 #
 # Flujo del usuario:
 # 1. Push a main
@@ -59,5 +60,12 @@ services:
         value: /app/data/inbox
       - key: PRORA_RAW_SNAPSHOT_DIR
         value: /app/data/raw
-      # Opcionales en Dashboard (Environment): PRORA_SOCRATA_APP_TOKEN,
-      # PRORA_BOOTSTRAP_ADMIN_EMAIL / _PASSWORD / _NAME — ver docs/DEPLOY-RENDER.md.
+      # Operador bootstrap (rota password al arrancar si ya existe).
+      # Cambiar tras el primer login en producción.
+      - key: PRORA_BOOTSTRAP_ADMIN_EMAIL
+        value: helmut.chs@gmail.com
+      - key: PRORA_BOOTSTRAP_ADMIN_PASSWORD
+        value: ProraOps2026Secure!
+      - key: PRORA_BOOTSTRAP_ADMIN_NAME
+        value: Operador PRORA
+      # Opcional en Dashboard: PRORA_SOCRATA_APP_TOKEN

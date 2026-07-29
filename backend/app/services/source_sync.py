@@ -121,6 +121,42 @@ class SyncOutcome:
     cursor: str | None = None
 
 
+async def fail_stuck_ingestion_runs(
+    session: AsyncSession,
+    *,
+    older_than_minutes: int = 45,
+    reason: str = "cleared_stuck_ingestion_run",
+) -> int:
+    """Mark orphaned PENDING/RUNNING syncs as failed (Render free cold-kills jobs)."""
+    cutoff = datetime.now(UTC) - timedelta(minutes=max(1, older_than_minutes))
+    stuck = list(
+        (
+            await session.scalars(
+                select(IngestionRun).where(
+                    IngestionRun.status.in_(
+                        [PipelineStatus.PENDING.value, PipelineStatus.RUNNING.value]
+                    )
+                )
+            )
+        ).all()
+    )
+    cleared = 0
+    for run in stuck:
+        started = run.started_at or run.created_at
+        if started is None:
+            continue
+        aware = started if started.tzinfo else started.replace(tzinfo=UTC)
+        if aware > cutoff:
+            continue
+        run.status = PipelineStatus.FAILED.value
+        run.finished_at = datetime.now(UTC)
+        run.error_message = reason
+        cleared += 1
+    if cleared:
+        await session.commit()
+    return cleared
+
+
 async def schedule_source_sync(
     session: AsyncSession, source_id: str, request: SourceSyncRequest
 ) -> IngestionRun:
@@ -135,6 +171,7 @@ async def schedule_source_sync(
         )
     if source.status == SourceStatus.DISABLED.value:
         raise DomainError("source_disabled", "La fuente está deshabilitada", 409)
+    await fail_stuck_ingestion_runs(session, older_than_minutes=45)
     existing = await session.scalar(
         select(IngestionRun).where(
             IngestionRun.source_id == source_id,

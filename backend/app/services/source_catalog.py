@@ -203,6 +203,36 @@ OFFICIAL_SOURCE_CATALOG: tuple[dict, ...] = (
         },
     },
     {
+        "id": "sivigila-microdata-2025",
+        "name": "SIVIGILA microdatos publicos anonimizados 2025",
+        "institution": "INS",
+        "source_type": "official-xlsx-set",
+        "endpoint": ("https://portalsivigila.ins.gov.co/Microdatos/Forms/AllItems.aspx"),
+        "status": SourceStatus.REQUIRES_CONFIGURATION.value,
+        "refresh_cron": None,
+        "configuration": {
+            "coverage": "national",
+            "dataset_type": "epidemiology",
+            "territorial_resolution": "municipality",
+            "temporal_resolution": "epidemiological_week",
+            "data_through_year": 2025,
+            "stale_for_current_monitoring": False,
+            "publication_kind": "annual anonymised event workbooks",
+            "discovery": "SharePoint document library",
+            "direct_file_template": (
+                "https://portalsivigila.ins.gov.co/Microdatos/Datos_2025_{event_code}.xlsx"
+            ),
+            "reason": (
+                "Los archivos Datos_2025_{evento}.xlsx aún no están publicados en la "
+                "biblioteca abierta de microdatos INS (HTTP 404 verificado 2026-07-28). "
+                "Cuando aparezcan, activar esta fuente espejo de sivigila-microdata-2024."
+            ),
+            "verified_http_status": 404,
+            "verified_on": "2026-07-28",
+            "publisher": "Instituto Nacional de Salud - INS",
+        },
+    },
+    {
         "id": "sivigila-current-authorized",
         "name": "SIVIGILA reciente autorizado 2025+ (entrega institucional)",
         "institution": "INS",
@@ -216,10 +246,12 @@ OFFICIAL_SOURCE_CATALOG: tuple[dict, ...] = (
             "temporal_resolution": "epidemiological_week",
             "reason": (
                 "Complementa la federación territorial abierta. Para cobertura nacional "
-                "operativa 2025+ aún se requiere entrega institucional agregada o "
-                "publicación tabular nacional verificable."
+                "operativa 2025+ aún se requiere entrega institucional agregada "
+                "(CSV canónico vía upload) o publicación tabular nacional verificable. "
+                "Plantilla: GET /api/v1/sources/templates/epidemiology."
             ),
             "patient_level_data_allowed": False,
+            "upload_dataset_type": "epidemiology",
             "publisher": "Instituto Nacional de Salud - INS",
         },
     },
@@ -583,10 +615,20 @@ OFFICIAL_SOURCE_CATALOG: tuple[dict, ...] = (
             "dataset_type": "vaccination_municipality",
             "territorial_resolution": "municipality",
             "temporal_resolution": "month_cutoff",
-            "available_cutoffs": ["2026-01", "2026-02"],
-            "archive_sha256": ("582ab20337fb52c97798cabd724d6725e7dea56248e153d0bbea9ddfa5e6dc40"),
+            "available_cutoffs": [
+                "2026-01",
+                "2026-02",
+                "2026-03",
+                "2026-04",
+                "2026-05",
+            ],
+            "archive_sha256": ("27e72159eb5495c9a6115210fb4009309d6e6e1c45c145f51ea40e75c373c941"),
+            "workbook_sha256": (
+                "260b07de39829c11eb4a48aa74bda5af0bdecf6fc3027119a94f5f66538adbeb"
+            ),
+            "data_through_month": "2026-05",
             "adapter_version": "pai-municipal-v1.1",
-            "verified_on": "2026-07-13",
+            "verified_on": "2026-07-28",
             "publisher": "Ministerio de Salud y Protección Social",
         },
     },

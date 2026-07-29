@@ -47,10 +47,11 @@ PAI_2026_CONTRACT = PAIFileContract(
         "https://www.minsalud.gov.co/sites/rid/Lists/BibliotecaDigital/RIDE/VS/PP/PAI/"
         "dosis-coberturas-biologicos-municipios-2026.zip"
     ),
-    expected_zip_sha256="582ab20337fb52c97798cabd724d6725e7dea56248e153d0bbea9ddfa5e6dc40",
-    expected_workbook_sha256="2a224659566c0a9b603cc664f36b456b5be9ad41ef3027eedd78d4e2ce4cbba7",
+    # Publicación MinSalud actualizada (corte acumulado Enero–Mayo 2026).
+    expected_zip_sha256="27e72159eb5495c9a6115210fb4009309d6e6e1c45c145f51ea40e75c373c941",
+    expected_workbook_sha256="260b07de39829c11eb4a48aa74bda5af0bdecf6fc3027119a94f5f66538adbeb",
     kind="current",
-    expected_size=2_484_893,
+    expected_size=8_571_462,
 )
 
 
@@ -256,8 +257,23 @@ def _selected_sheets(
             for name in sheet_names
             if name.isdigit() and lower <= int(name) <= min(upper, 2025)
         ]
-    month_names = {"Enero": 1, "Febrero": 2}
-    wanted = months or {1, 2}
+    month_names = {
+        "Enero": 1,
+        "Febrero": 2,
+        "Marzo": 3,
+        "Abril": 4,
+        "Mayo": 5,
+        "Junio": 6,
+        "Julio": 7,
+        "Agosto": 8,
+        "Septiembre": 9,
+        "Octubre": 10,
+        "Noviembre": 11,
+        "Diciembre": 12,
+    }
+    # Por defecto toma todos los meses publicados en el ZIP (hoy Enero–Mayo).
+    published = {month_names[name] for name in sheet_names if name in month_names}
+    wanted = months or published or {1, 2}
     return [
         (name, 2026, month_names[name])
         for name in sheet_names
@@ -352,14 +368,30 @@ def _parse_sheet(
                     },
                 )
             )
-    if sheet_name in {"2024", "2025", "Enero", "Febrero"} and len(unique_candidates) != 1122:
+    expected_territories = {
+        "2024": 1122,
+        "2025": 1122,
+        "Enero": 1147,
+        "Febrero": 1147,
+        "Marzo": 1147,
+        "Abril": 1147,
+        "Mayo": 1147,
+        "Junio": 1147,
+        "Julio": 1147,
+        "Agosto": 1147,
+        "Septiembre": 1147,
+        "Octubre": 1147,
+        "Noviembre": 1147,
+        "Diciembre": 1147,
+    }.get(sheet_name)
+    if expected_territories is not None and len(unique_candidates) != expected_territories:
         result.rejections.append(
             PAIFileRejection(
                 header_row,
                 "territory_cardinality_mismatch",
                 (
-                    f"{sheet_name}: se esperaban 1122 municipios y se validaron "
-                    f"{len(unique_candidates)}."
+                    f"{sheet_name}: se esperaban {expected_territories} municipios y se "
+                    f"validaron {len(unique_candidates)}."
                 ),
                 {"sheet": sheet_name, "validated_municipalities": len(unique_candidates)},
             )

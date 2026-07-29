@@ -17,6 +17,7 @@ from app.db.base import Base
 from app.db.session import build_engine, build_session_factory
 from app.models import DataSource  # noqa: F401 - register all ORM tables
 from app.services.source_catalog import seed_source_catalog
+from app.services.source_sync import fail_stuck_ingestion_runs
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -33,6 +34,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 await connection.run_sync(Base.metadata.create_all)
             async with session_factory() as session:
                 await seed_source_catalog(session)
+        try:
+            async with session_factory() as session:
+                cleared = await fail_stuck_ingestion_runs(
+                    session,
+                    older_than_minutes=30,
+                    reason="cleared_on_api_startup",
+                )
+                if cleared:
+                    logger.warning(
+                        "Cleared stuck ingestion runs on startup",
+                        extra={"cleared": cleared},
+                    )
+                await seed_source_catalog(session)
+        except Exception:
+            logger.exception("Startup source recovery failed")
         if runtime.uses_ephemeral_jwt_secret:
             logger.warning(
                 "Development mode active; configure PRORA_JWT_SECRET for persistent sessions",
