@@ -106,7 +106,16 @@ function HistoryChart({ points }: { points: HistoricalPoint[] }) {
   const x = (index: number) => 20 + (index / Math.max(points.length - 1, 1)) * (width - 40)
   const y = (value: number) => height - 24 - (value / maximum) * (height - 48)
   const path = points.map((point, index) => `${index ? 'L' : 'M'} ${x(index)} ${y(point.observed)}`).join(' ')
-  const ticks = Array.from(new Set([0, Math.floor((points.length - 1) / 2), points.length - 1]))
+  const desiredTicks = Math.min(5, points.length)
+  const tickIndexes = Array.from({ length: desiredTicks }, (_, step) => (
+    desiredTicks === 1 ? 0 : Math.round((step / (desiredTicks - 1)) * (points.length - 1))
+  ))
+  const uniqueTicks = [...new Set(tickIndexes)]
+  const formatAxisDate = (value: string) => new Intl.DateTimeFormat('es-CO', {
+    day: 'numeric',
+    month: 'numeric',
+    year: '2-digit',
+  }).format(new Date(`${value}T00:00:00`))
   return (
     <div className="history-chart">
       <div className="chart-legend"><span><i className="legend-line legend-line--solid" /> Casos observados</span></div>
@@ -115,7 +124,7 @@ function HistoryChart({ points }: { points: HistoricalPoint[] }) {
         <path d={path} className="chart-line chart-line--observed" />
         {points.map((point, index) => <circle key={`${point.date}-${index}`} cx={x(index)} cy={y(point.observed)} r={index === points.length - 1 ? 4 : 2.7} className="chart-point"><title>{formatDate(point.date)}: {formatNumber(point.observed)} casos{point.is_preliminary ? ' · preliminar' : ''}</title></circle>)}
       </svg>
-      <div className="chart-axis">{ticks.map((index) => <span key={index}>{formatDate(points[index].date)}</span>)}</div>
+      <div className="chart-axis">{uniqueTicks.map((index) => <span key={index}>{formatAxisDate(points[index].date)}</span>)}</div>
     </div>
   )
 }

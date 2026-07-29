@@ -63,7 +63,7 @@
 .analytics-svg-wrap { width: 100%; overflow: hidden; }
 .analytics-line-chart { width: 100%; height: auto; min-height: 240px; }
 .analytics-grid-line { stroke: var(--line, #dfe8e6); stroke-width: 1; }
-.analytics-axis-label { fill: var(--faint, #91a3a4); font: 600 10px 'DM Sans', sans-serif; }
+.analytics-axis-label { fill: var(--faint, #91a3a4); font: 600 10px 'DM Sans', sans-serif; letter-spacing: -.2px; }
 .analytics-history-area { fill: color-mix(in srgb, var(--analytics-primary) 13%, transparent); }
 .analytics-history-observed { fill: none; stroke: var(--analytics-primary); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
 .analytics-history-baseline { fill: none; stroke: var(--faint, #91a3a4); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 6 6; }

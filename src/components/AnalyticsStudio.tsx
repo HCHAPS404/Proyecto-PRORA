@@ -46,6 +46,66 @@ const formatNumber = (value: number) => new Intl.NumberFormat('es-CO', { maximum
 const formatDate = (value?: string | null) => value
   ? new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium' }).format(new Date(`${value}T00:00:00`))
   : 'Sin corte disponible'
+const formatAxisDate = (value?: string | null) => value
+  ? new Intl.DateTimeFormat('es-CO', { day: 'numeric', month: 'numeric', year: '2-digit' }).format(new Date(`${value}T00:00:00`))
+  : ''
+
+type ChartAxisTick = { x: number; label: string; anchor: 'start' | 'middle' | 'end' }
+
+/** Evenly samples slot indexes, then drops labels closer than minGap px (keeps edges). */
+function buildSpacedAxisTicks(
+  slotCount: number,
+  xAt: (index: number) => number,
+  labelAt: (index: number) => string,
+  options?: { minGap?: number; maxTicks?: number; plotLeft?: number; plotRight?: number },
+): ChartAxisTick[] {
+  if (slotCount <= 0) return []
+  const minGap = options?.minGap ?? 92
+  const maxTicks = options?.maxTicks ?? 6
+  const plotLeft = options?.plotLeft ?? xAt(0)
+  const plotRight = options?.plotRight ?? xAt(slotCount - 1)
+  const desired = Math.max(2, Math.min(maxTicks, slotCount, Math.floor((plotRight - plotLeft) / minGap) + 1))
+  const indexes = Array.from({ length: desired }, (_, step) => (
+    desired === 1 ? 0 : Math.round((step / (desired - 1)) * (slotCount - 1))
+  ))
+  const unique = [...new Set(indexes)].sort((a, b) => a - b)
+  const selected: { x: number; label: string; index: number }[] = []
+  for (const index of unique) {
+    const label = labelAt(index)
+    if (!label) continue
+    const x = xAt(index)
+    const previous = selected[selected.length - 1]
+    if (previous && x - previous.x < minGap) {
+      if (index === unique[unique.length - 1]) {
+        selected[selected.length - 1] = { x, label, index }
+      }
+      continue
+    }
+    selected.push({ x, label, index })
+  }
+  if (selected.length && unique.length) {
+    const lastIndex = unique[unique.length - 1]
+    const lastLabel = labelAt(lastIndex)
+    if (lastLabel && selected[selected.length - 1].index !== lastIndex) {
+      const lastX = xAt(lastIndex)
+      while (selected.length > 1 && lastX - selected[selected.length - 1].x < minGap) {
+        selected.pop()
+      }
+      if (!selected.length || lastX - selected[selected.length - 1].x >= minGap * 0.65) {
+        selected.push({ x: lastX, label: lastLabel, index: lastIndex })
+      } else {
+        selected[selected.length - 1] = { x: lastX, label: lastLabel, index: lastIndex }
+      }
+    }
+  }
+  const edgePad = 8
+  return selected.map((tick, position) => {
+    let anchor: ChartAxisTick['anchor'] = 'middle'
+    if (position === 0 || tick.x <= plotLeft + edgePad) anchor = 'start'
+    else if (position === selected.length - 1 || tick.x >= plotRight - edgePad) anchor = 'end'
+    return { x: tick.x, label: tick.label, anchor }
+  })
+}
 
 function forecastFailureMessage(reason: unknown) {
   if (reason instanceof ApiError) {
@@ -87,7 +147,12 @@ function SeriesChart({ series, diseaseLabel }: { series: AnalyticsSeries; diseas
   const incidencePath = maxIncidence > 0
     ? points.map((point, index) => `${index ? 'L' : 'M'} ${x(index)} ${yIncidence(point.incidence_per_100k ?? 0)}`).join(' ')
     : ''
-  const tickIndexes = Array.from(new Set([0, Math.floor((points.length - 1) / 2), points.length - 1]))
+  const axisTicks = buildSpacedAxisTicks(
+    points.length,
+    x,
+    (index) => formatAxisDate(points[index]?.week),
+    { plotLeft: left, plotRight: left + plotWidth, minGap: 88, maxTicks: 6 },
+  )
 
   return (
     <div className="analytics-svg-wrap">
@@ -101,7 +166,7 @@ function SeriesChart({ series, diseaseLabel }: { series: AnalyticsSeries; diseas
         <path d={path} className="analytics-history-observed" />
         {incidencePath ? <path d={incidencePath} className="analytics-history-incidence" fill="none" /> : null}
         {points.map((point, index) => <circle key={`${point.week}-${index}`} cx={x(index)} cy={y(point.observed_cases)} r={index === points.length - 1 ? 5 : 3} className="analytics-history-point"><title>{formatDate(point.week)}: {formatNumber(point.observed_cases)} casos{point.incidence_per_100k != null ? ` · ${formatNumber(point.incidence_per_100k)} /100k` : ''}{point.is_preliminary ? ' · preliminar' : ''}</title></circle>)}
-        {tickIndexes.map((index) => <text key={index} x={x(index)} y={height - 13} textAnchor="middle" className="analytics-axis-label">{formatDate(points[index].week)}</text>)}
+        {axisTicks.map((tick) => <text key={`${tick.x}-${tick.label}`} x={tick.x} y={height - 13} textAnchor={tick.anchor} className="analytics-axis-label">{tick.label}</text>)}
       </svg>
       <div className="analytics-legend analytics-legend--inline">
         <span><i className="analytics-legend__line analytics-legend__line--observed" /> Casos semanales</span>
@@ -209,14 +274,14 @@ function ForecastChart({
   const band = upper.length
     ? `${points.map((point, index) => `${index ? 'L' : 'M'} ${projX(index)} ${y(point.upper_bound)}`).join(' ')} ${[...lower].reverse().map((value, reverseIndex) => `L ${projX(lower.length - 1 - reverseIndex)} ${y(value)}`).join(' ')} Z`
     : ''
-  const tickIndexes = Array.from(new Set([
-    0,
-    Math.floor((histCount - 1) / 2),
-    Math.max(histCount - 1, 0),
-    histCount,
-    histCount + Math.floor((projCount - 1) / 2),
-    totalSlots - 1,
-  ].filter((index) => index >= 0 && index < totalSlots)))
+  const axisTicks = buildSpacedAxisTicks(
+    totalSlots,
+    xAt,
+    (index) => (index < histCount
+      ? formatAxisDate(historicalPoints[index]?.week)
+      : formatAxisDate(points[index - histCount]?.target_week)),
+    { plotLeft: left, plotRight: left + plotWidth, minGap: 96, maxTicks: 6 },
+  )
 
   const heading = operational
     ? 'Predicción operativa'
@@ -250,13 +315,9 @@ function ForecastChart({
           {projCentral ? <path d={projCentral} className="analytics-projection-line" fill="none" /> : null}
           {historicalPoints.map((point, index) => <circle key={`hist-${point.week}`} cx={histX(index)} cy={y(point.observed_cases)} r={index === histCount - 1 ? 4 : 3} className="analytics-history-point"><title>{formatDate(point.week)}: {formatNumber(point.observed_cases)} casos observados</title></circle>)}
           {points.map((point, index) => <circle key={point.target_week} cx={projX(index)} cy={y(point.predicted_cases)} r="4" className="analytics-projection-point"><title>{formatDate(point.target_week)}: {formatNumber(point.predicted_cases)} casos · IC {formatNumber(point.lower_bound)}–{formatNumber(point.upper_bound)}</title></circle>)}
-          {tickIndexes.map((index) => {
-            const label = index < histCount
-              ? formatDate(historicalPoints[index]?.week ?? '')
-              : formatDate(points[index - histCount]?.target_week ?? '')
-            const cx = xAt(index)
-            return <text key={`tick-${index}`} x={cx} y={height - 13} textAnchor="middle" className="analytics-axis-label">{label}</text>
-          })}
+          {axisTicks.map((tick) => (
+            <text key={`${tick.x}-${tick.label}`} x={tick.x} y={height - 13} textAnchor={tick.anchor} className="analytics-axis-label">{tick.label}</text>
+          ))}
         </svg>
       </div>
       <div className="analytics-model-metrics">
