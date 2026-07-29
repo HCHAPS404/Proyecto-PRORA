@@ -29,7 +29,10 @@ La app usa rutas hash (`#/panorama`, `#/fuentes`, …), compatibles con Pages si
 | FastAPI / worker en ejecución | No en Pages | **Render** (`render.yaml`) u otro host que use la imagen GHCR |
 | Entrenamiento ML / alertas | No en Pages | Worker + API desplegados |
 
-Sin API pública, Pages sirve la plataforma en **modo invitado**. Para demo funcional completa: publique la imagen, despliegue Render (o VPS) y defina `PRORA_API_BASE_URL`. Guía: [backend-deploy.md](backend-deploy.md).
+Sin API pública, Pages sirve la plataforma en **modo invitado**. Para demo funcional completa: despliegue Render y defina `PRORA_API_BASE_URL`.
+
+**Guía paso a paso (recomendado):** [DEPLOY-RENDER.md](DEPLOY-RENDER.md).
+
 
 ## Variables del repositorio (obligatorias para API remota)
 
@@ -54,12 +57,15 @@ Si usa dominio propio para Pages, añada también ese origen HTTPS.
 
 ## Backend integrado en el mismo GitHub
 
-1. **Actions → Publicar backend en GHCR** (automático en push a `main` con cambios en `backend/`)
-2. **Render → New → Blueprint** con este repo (`render.yaml`)
-3. Migrar: `./docker-entrypoint.sh migrate` en el shell del servicio
-4. Variable `PRORA_API_BASE_URL` + republicar Pages
+1. Push a `main` (Pages + GHCR automáticos)
+2. **Render → New → Blueprint** con este repo (`render.yaml`) — ver [DEPLOY-RENDER.md](DEPLOY-RENDER.md)
+3. Variable `PRORA_API_BASE_URL` + republicar Pages
 
-Detalle: [backend-deploy.md](backend-deploy.md).
+Las migraciones corren solas al arrancar la API (`PRORA_RUN_MIGRATIONS_ON_START`).
+El worker va embebido en el servicio web (Render free no admite workers aparte).
+
+Detalle: [backend-deploy.md](backend-deploy.md) · [DEPLOY-RENDER.md](DEPLOY-RENDER.md).
+
 
 Alternativa VPS con imagen de GitHub:
 

@@ -66,3 +66,5 @@ jobs:
           echo "- **Repo:** https://github.com/${{ github.repository }}" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "Si definió \`PRORA_API_BASE_URL\`, el frontend llamará a esa API (CORS debe permitir el origen de Pages)." >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Backend público: despliegue Render con \`render.yaml\` y siga [docs/DEPLOY-RENDER.md](../blob/main/docs/DEPLOY-RENDER.md)." >> "$GITHUB_STEP_SUMMARY"

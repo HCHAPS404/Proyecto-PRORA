@@ -18,9 +18,8 @@ COPY alembic ./alembic
 COPY app ./app
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
 
-# El valor completo incluye LSTM y explicabilidad. Para una imagen liviana de API
-# puede usarse --build-arg PRORA_EXTRAS=ml.
-ARG PRORA_EXTRAS=ml,lstm,explainability
+# Por defecto imagen liviana (Render free). GHCR pasa ml,lstm,explainability.
+ARG PRORA_EXTRAS=ml
 RUN pip install --upgrade pip \
     && pip install ".[${PRORA_EXTRAS}]" \
     && chmod +x /app/docker-entrypoint.sh \

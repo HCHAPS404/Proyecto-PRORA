@@ -157,18 +157,18 @@ Luego cree el operador, sincronice fuentes y entrene (pasos 5–8 de
 
 ### C) Backend público + Pages conectado (ruta recomendada)
 
-Orden fijo; no salte el paso de migraciones ni el de la variable de Pages.
+**Guía clic a clic:** [docs/DEPLOY-RENDER.md](docs/DEPLOY-RENDER.md).
+
+Orden fijo tras el push a `main`:
 
 | Paso | Acción | Resultado |
 | --- | --- | --- |
-| 1 | Push a `main` (o Run workflow *Publicar backend en GHCR*) | Imagen en `ghcr.io/hchaps404/proyecto-prora-api` |
-| 2 | [Render](https://dashboard.render.com/) → **New → Blueprint** → este repo | Lee `render.yaml` (API + worker + Postgres) |
-| 3 | Shell del servicio web → `./docker-entrypoint.sh migrate` | Esquema listo |
-| 4 | Copie la URL HTTPS de la API (ej. `https://….onrender.com`) | Backend público |
-| 5 | GitHub → **Settings → Secrets and variables → Actions → Variables** → `PRORA_API_BASE_URL=https://SU-API/api/v1` | Front sabe a dónde llamar |
-| 6 | CORS en la API: `PRORA_CORS_ORIGINS=["https://hchaps404.github.io"]` | El navegador no bloquea |
-| 7 | Actions → *Publicar frontend en GitHub Pages* | Build con la URL correcta |
-| 8 | Login operador en esa API → sync + train | Datos y champions |
+| 1 | Push a `main` | Pages + (opcional) imagen GHCR |
+| 2 | [Render](https://dashboard.render.com/) → **New → Blueprint** → este repo | Lee `render.yaml` (API free + Postgres free + worker embebido) |
+| 3 | Abrir `https://….onrender.com/ready` | Backend público (migraciones automáticas) |
+| 4 | GitHub → **Variables** → `PRORA_API_BASE_URL=https://SU-API/api/v1` | Front sabe a dónde llamar |
+| 5 | Actions → *Publicar frontend en GitHub Pages* | Build con la URL correcta |
+| 6 | (Opcional) Bootstrap admin en Render Environment | Login operador para sync/train |
 
 Alternativa VPS (misma imagen GHCR):
 
@@ -178,6 +178,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compos
 ```
 
 Pasos completos, checklist y límites del plan free:
+[docs/DEPLOY-RENDER.md](docs/DEPLOY-RENDER.md),
 [docs/backend-deploy.md](docs/backend-deploy.md) y
 [docs/github-deploy.md](docs/github-deploy.md).
 
@@ -214,6 +215,7 @@ operativa nacional.
 | Documento | Contenido |
 | --- | --- |
 | [docs/INSTALL.md](docs/INSTALL.md) | Instalación detallada |
+| [docs/DEPLOY-RENDER.md](docs/DEPLOY-RENDER.md) | **Paso a paso Pages + Render free** |
 | [docs/architecture.md](docs/architecture.md) | Arquitectura y flujos |
 | [docs/uml.md](docs/uml.md) | Diagramas UML (Mermaid) |
 | [docs/deployment.md](docs/deployment.md) | Operación y Compose |

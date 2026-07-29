@@ -58,13 +58,21 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_runtime_security(self) -> Settings:
         # PaaS (Render, Railway, etc.) suelen entregar postgres://; SQLAlchemy async
-        # requiere el driver asyncpg.
+        # requiere el driver asyncpg. Render exige TLS en Postgres gestionado.
         if self.database_url.startswith("postgres://"):
             self.database_url = "postgresql+asyncpg://" + self.database_url[len("postgres://") :]
         elif self.database_url.startswith("postgresql://"):
             self.database_url = (
                 "postgresql+asyncpg://" + self.database_url[len("postgresql://") :]
             )
+
+        if self.database_url.startswith("postgresql+asyncpg://"):
+            lower = self.database_url.lower()
+            is_local = "localhost" in lower or "127.0.0.1" in lower
+            has_ssl = "ssl=" in lower or "sslmode=" in lower
+            if not is_local and not has_ssl:
+                separator = "&" if "?" in self.database_url else "?"
+                self.database_url = f"{self.database_url}{separator}ssl=require"
 
         if self.environment == "production":
             if self.jwt_secret is None or len(self.jwt_secret.get_secret_value()) < 32:

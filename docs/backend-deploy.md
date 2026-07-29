@@ -1,14 +1,16 @@
 # Backend integrado con GitHub (GHCR + Pages + Render)
 
-GitHub Pages **no ejecuta** FastAPI. La integración “seria” en el mismo repo es:
+GitHub Pages **no ejecuta** FastAPI. La integración en el mismo repo es:
 
 ```text
 GitHub repo
 ├─ Actions → Pages          → https://hchaps404.github.io/Proyecto-PRORA/
 ├─ Actions → GHCR           → ghcr.io/hchaps404/proyecto-prora-api
-└─ Render Blueprint         → API + worker + Postgres (HTTPS)
+└─ Render Blueprint         → API free + Postgres free (+ worker embebido)
          └─ variable PRORA_API_BASE_URL une Pages ↔ API
 ```
+
+**Guía corta para conectar Render ahora:** [DEPLOY-RENDER.md](DEPLOY-RENDER.md).
 
 | Pieza | Dónde vive en GitHub | Resultado |
 | --- | --- | --- |
@@ -30,27 +32,29 @@ ghcr.io/hchaps404/proyecto-prora-api:latest
 ```
 
 Si el paquete queda privado: **Packages → package settings → Change visibility → Public**
-(necesario para que Render/VPS lo descarguen sin token).
+(necesario si otro host descarga la imagen sin token). Render Blueprint
+**construye desde el Dockerfile** del repo; no depende de GHCR.
 
-## Paso 2 — Desplegar API desde el mismo repo (Render)
+## Paso 2 — Desplegar API (Render Blueprint)
+
+Detalle clic a clic: [DEPLOY-RENDER.md](DEPLOY-RENDER.md).
+
+Resumen:
 
 1. [Render Dashboard](https://dashboard.render.com/) → **New → Blueprint**
 2. Conecte el repo `HCHAPS404/Proyecto-PRORA`
 3. Render lee `render.yaml` y crea:
-   - Postgres `prora-db`
-   - Web `prora-api` (Docker `backend/Dockerfile`, comando `api`)
-   - Worker `prora-worker` (mismo image, comando `worker`)
-4. Tras el primer deploy, abra un **Shell** del servicio web y ejecute migraciones:
+   - Postgres `prora-db` (free, caduca a 30 días)
+   - Web `prora-api` (free: API + migraciones al arrancar + worker embebido)
+4. No hace falta Shell para migrar (`PRORA_RUN_MIGRATIONS_ON_START=true`).
+5. Copie la URL del servicio (ej. `https://prora-api.onrender.com`) y abra `/ready`.
 
-```bash
-./docker-entrypoint.sh migrate
-```
+Variables del blueprint: `PRORA_ENVIRONMENT=production`, CORS de Pages, JWT
+generado, DB enlazada, worker embebido. Opcional en Dashboard:
+`PRORA_BOOTSTRAP_ADMIN_*`, `PRORA_SOCRATA_APP_TOKEN`.
 
-5. Copie la URL del servicio (ej. `https://prora-api.onrender.com`)
-
-Variables ya definidas en el blueprint: `PRORA_ENVIRONMENT=production`,
-CORS con Pages, JWT generado, `PRORA_DATABASE_URL` desde Postgres.
-Opcional: añada `PRORA_SOCRATA_APP_TOKEN` en el dashboard.
+> **Nota:** Render no permite background workers en plan free. Por eso el
+> worker corre dentro del mismo servicio web.
 
 ## Paso 3 — Conectar Pages al backend
 
@@ -94,14 +98,14 @@ Invoke-RestMethod -Method POST -Uri "$api/api/v1/sources/sivigila-territorial-op
 ## Limitaciones honestas (demo)
 
 - Plan free de Render duerme el servicio; la primera petición puede tardar ~30–60 s.
+- Postgres free caduca a los 30 días.
+- Disco efímero: artefactos ML/snapshots se pierden al redeploy.
 - Sin SIVIGILA municipal &lt; 35 días el sistema permanece en `research_only` (correcto).
-- El worker free también puede pausarse; para demos en vivo haga warm-up de `/ready` antes.
 
 ## Checklist
 
-- [ ] Workflow **backend-ghcr** en verde  
-- [ ] Paquete GHCR público (o token en Render)  
-- [ ] Blueprint Render desplegado + `migrate`  
+- [ ] Push a `main` / workflow Pages en verde  
+- [ ] Blueprint Render desplegado (`prora-api` + `prora-db`)  
 - [ ] `/ready` responde en HTTPS  
 - [ ] Variable `PRORA_API_BASE_URL` en GitHub  
 - [ ] Pages republicado y Panorama deja de mostrar “backend no disponible”

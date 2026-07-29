@@ -8,6 +8,7 @@ cuando necesite detalle de instalación, despliegue o diseño.
 | Documento | Cuándo usarlo |
 | --- | --- |
 | [INSTALL.md](INSTALL.md) | Primera instalación en PC (Windows/Linux), operador, sync y train |
+| [DEPLOY-RENDER.md](DEPLOY-RENDER.md) | **Paso a paso:** commit → Blueprint Render → conectar Pages |
 | [deployment.md](deployment.md) | Docker Compose local y casi producción |
 | [github-deploy.md](github-deploy.md) | GitHub Pages, Actions y variables |
 | [backend-deploy.md](backend-deploy.md) | Imagen GHCR, Render Blueprint y VPS |
@@ -32,7 +33,8 @@ cuando necesite detalle de instalación, despliegue o diseño.
 1. [../README.md](../README.md) — visión general e instalación corta  
 2. [INSTALL.md](INSTALL.md) — dejar API + worker + UI en el PC  
 3. [uml.md](uml.md) + [architecture.md](architecture.md) — entender el sistema  
-4. [github-deploy.md](github-deploy.md) + [backend-deploy.md](backend-deploy.md) — publicar  
+4. [DEPLOY-RENDER.md](DEPLOY-RENDER.md) — publicar front + back gratis  
+5. [github-deploy.md](github-deploy.md) + [backend-deploy.md](backend-deploy.md) — detalle técnico  
 
 ## Diagrama rápido del sistema
 

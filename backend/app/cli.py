@@ -113,6 +113,10 @@ def _parser() -> argparse.ArgumentParser:
     create.add_argument("--role", required=True, choices=["analyst", "admin"])
     create.add_argument("--full-name")
     create.add_argument(
+        "--password",
+        help="Solo para bootstrap no interactivo (p. ej. Render). En local use getpass.",
+    )
+    create.add_argument(
         "--promote-existing",
         action="store_true",
         help="Autoriza el cambio de rol de una cuenta existente",
@@ -124,10 +128,13 @@ def main() -> None:
     arguments = _parser().parse_args()
     password = None
     if arguments.command == "create-operator" and arguments.full_name:
-        password = getpass.getpass("Contraseña (no se mostrará): ")
-        confirmation = getpass.getpass("Repita la contraseña: ")
-        if password != confirmation:
-            raise SystemExit("Las contraseñas no coinciden")
+        if arguments.password:
+            password = arguments.password
+        else:
+            password = getpass.getpass("Contraseña (no se mostrará): ")
+            confirmation = getpass.getpass("Repita la contraseña: ")
+            if password != confirmation:
+                raise SystemExit("Las contraseñas no coinciden")
     try:
         result = asyncio.run(
             create_operator(
