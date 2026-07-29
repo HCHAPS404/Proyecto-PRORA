@@ -4,7 +4,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
   type KeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type WheelEvent as ReactWheelEvent,
@@ -205,17 +204,19 @@ export default function ColombiaRiskMap({ disease, horizon, selectedTerritory, s
     }
   }
 
-  const markerTooltipStyle = (point: { x: number; y: number } | null, fallbackX = 214, fallbackY = 24) => {
-    const viewX = point ? 195 + pan.x + (point.x - 195) * zoom + 18 : fallbackX
-    const viewY = point ? 275 + pan.y + (point.y - 275) * zoom - 55 : fallbackY
-    return {
-      '--tooltip-x': `${Math.max(0, Math.min(390, viewX)) / 390 * 100}%`,
-      '--tooltip-y': `${Math.max(0, Math.min(550, viewY)) / 550 * 100}%`,
-    } as CSSProperties
-  }
-
-  const tooltipStyle = active ? markerTooltipStyle(active) : undefined
-  const historyTooltipStyle = markerTooltipStyle(activeHistorical)
+  const withoutCoordinates = Math.max(0, historicalTerritories.length - historicalData.length)
+  const dockedHistorical = historicalMode
+    ? (activeHistorical ?? (selectedHistoricalTerritory
+      ? historicalData.find((item) => item.cod_dane === selectedHistoricalTerritory.cod_dane) ?? null
+      : null))
+    : null
+  const dockedRisk = historicalMode ? null : active
+  const formatMapDate = (value?: string | null) => value
+    ? new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium' }).format(new Date(`${value}T00:00:00`))
+    : '—'
+  const formatMapNumber = (value?: number | null) => value == null
+    ? '—'
+    : new Intl.NumberFormat('es-CO').format(value)
 
   const setZoomLevel = (nextZoom: number) => {
     const normalized = Math.max(1, Math.min(4, Number(nextZoom.toFixed(2))))
@@ -282,6 +283,7 @@ export default function ColombiaRiskMap({ disease, horizon, selectedTerritory, s
         <span className={`colombia-risk-map__horizon${historicalMode ? ' is-historical' : ''}`} aria-label={historicalMode ? 'Contexto histórico observado' : `Horizonte de ${safeHorizon} semanas`}>{historicalMode ? 'Histórico' : `+${safeHorizon} sem.`}</span>
       </div>
 
+      <div className="colombia-risk-map__stage">
       <div className="colombia-risk-map__canvas">
         {!bounds && <div className="colombia-risk-map__loading" role="status"><i/><span>Cargando geometría territorial…</span></div>}
         {bounds && !historicalMode && dataState !== 'live' && (
@@ -327,12 +329,46 @@ export default function ColombiaRiskMap({ disease, horizon, selectedTerritory, s
             </g>
           </g>
         </svg>
-
-        {active && <div className="colombia-risk-map__tooltip" style={tooltipStyle} role="status" aria-live="polite"><div className="colombia-risk-map__tooltip-heading"><strong>{active.name}</strong><span className={`colombia-risk-map__risk-badge colombia-risk-map__risk-badge--${active.level}`}>{RISK_DEFINITIONS[active.level].label}</span></div><dl className="colombia-risk-map__tooltip-metrics"><div><dt>Índice estimado</dt><dd>{active.score}/100</dd></div><div><dt>Población aprox.</dt><dd>{active.population}</dd></div></dl><p className="colombia-risk-map__tooltip-signal">Señal climática: {active.climateSignal}</p></div>}
-        {historicalMode && activeHistorical && <div className="colombia-risk-map__tooltip colombia-risk-map__tooltip--history" style={historyTooltipStyle} role="status" aria-live="polite"><div className="colombia-risk-map__tooltip-heading"><strong>{activeHistorical.municipality}</strong><span className="colombia-risk-map__history-badge">Observado</span></div><dl className="colombia-risk-map__tooltip-metrics"><div><dt>Último corte</dt><dd>{new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium' }).format(new Date(`${activeHistorical.latest_week}T00:00:00`))}</dd></div><div><dt>Casos del corte</dt><dd>{new Intl.NumberFormat('es-CO').format(activeHistorical.latest_observed_cases)}</dd></div></dl><p className="colombia-risk-map__tooltip-signal">Serie disponible: {new Intl.NumberFormat('es-CO').format(activeHistorical.total_observed_cases)} casos en {new Intl.NumberFormat('es-CO').format(activeHistorical.observation_rows)} cortes publicados. El tamaño del punto representa casos del último corte, no riesgo.</p></div>}
       </div>
 
-      <div className="colombia-risk-map__footer">{historicalMode ? <div className="colombia-risk-map__legend" aria-label="Leyenda de consulta histórica"><span className="colombia-risk-map__legend-title">Tipo de dato</span><ul className="colombia-risk-map__legend-list"><li className="colombia-risk-map__legend-item"><span className="colombia-risk-map__legend-swatch colombia-risk-map__legend-swatch--history" aria-hidden="true"/><span>Casos observados · tamaño por último corte</span></li></ul></div> : <div className="colombia-risk-map__legend" aria-label="Leyenda del nivel de riesgo"><span className="colombia-risk-map__legend-title">Nivel de riesgo</span><ul className="colombia-risk-map__legend-list">{(Object.entries(RISK_DEFINITIONS) as [RiskLevel, RiskDefinition][]).map(([level, definition]) => <li key={level} className="colombia-risk-map__legend-item"><span className={`colombia-risk-map__legend-swatch colombia-risk-map__legend-swatch--${level}`} style={{ backgroundColor: definition.color }} aria-hidden="true" /><span>{definition.label}</span><span className="colombia-risk-map__legend-range">{definition.range}</span></li>)}</ul></div>}<figcaption className="colombia-risk-map__caption">{historicalMode ? `${historicalData.length} municipios con coordenadas se muestran como observaciones. Seleccionado: ${selectedHistoricalTerritory?.municipality}. Los puntos no representan incidencia ni riesgo.` : dataState === 'live' ? `${riskItems.length} predicciones municipales operacionales publicadas por PRORA.` : 'Mapa administrativo real de Colombia. No se muestran puntos sintéticos ni resultados históricos como si fueran actuales.'}</figcaption></div>
+      <aside className="colombia-risk-map__dock" aria-live="polite">
+        {dockedHistorical ? (
+          <>
+            <div className="colombia-risk-map__tooltip-heading">
+              <strong>{dockedHistorical.municipality}</strong>
+              <span className="colombia-risk-map__history-badge">Observado</span>
+            </div>
+            <p className="colombia-risk-map__dock-place">{dockedHistorical.department} · {dockedHistorical.cod_dane}</p>
+            <dl className="colombia-risk-map__tooltip-metrics">
+              <div><dt>Último corte</dt><dd>{formatMapDate(dockedHistorical.latest_week)}</dd></div>
+              <div><dt>Casos del corte</dt><dd>{formatMapNumber(dockedHistorical.latest_observed_cases)}</dd></div>
+              <div><dt>Cortes publicados</dt><dd>{formatMapNumber(dockedHistorical.observation_rows)}</dd></div>
+              <div><dt>Casos totales</dt><dd>{formatMapNumber(dockedHistorical.total_observed_cases)}</dd></div>
+            </dl>
+            <p className="colombia-risk-map__tooltip-signal">Serie observada (no es riesgo). Primer corte: {formatMapDate(dockedHistorical.first_week)}.</p>
+          </>
+        ) : dockedRisk ? (
+          <>
+            <div className="colombia-risk-map__tooltip-heading">
+              <strong>{dockedRisk.name}</strong>
+              <span className={`colombia-risk-map__risk-badge colombia-risk-map__risk-badge--${dockedRisk.level}`}>{RISK_DEFINITIONS[dockedRisk.level].label}</span>
+            </div>
+            <dl className="colombia-risk-map__tooltip-metrics">
+              <div><dt>Índice estimado</dt><dd>{dockedRisk.score}/100</dd></div>
+              <div><dt>Población aprox.</dt><dd>{dockedRisk.population}</dd></div>
+            </dl>
+            <p className="colombia-risk-map__tooltip-signal">Señal climática: {dockedRisk.climateSignal}</p>
+          </>
+        ) : (
+          <div className="colombia-risk-map__dock-empty">
+            <strong>Detalle territorial</strong>
+            <span>Seleccione un punto del mapa para ver el último corte y la serie publicada sin tapar Colombia.</span>
+          </div>
+        )}
+      </aside>
+      </div>
+
+      <div className="colombia-risk-map__footer">{historicalMode ? <div className="colombia-risk-map__legend" aria-label="Leyenda de consulta histórica"><span className="colombia-risk-map__legend-title">Tipo de dato</span><ul className="colombia-risk-map__legend-list"><li className="colombia-risk-map__legend-item"><span className="colombia-risk-map__legend-swatch colombia-risk-map__legend-swatch--history" aria-hidden="true"/><span>Casos observados · tamaño por último corte</span></li></ul></div> : <div className="colombia-risk-map__legend" aria-label="Leyenda del nivel de riesgo"><span className="colombia-risk-map__legend-title">Nivel de riesgo</span><ul className="colombia-risk-map__legend-list">{(Object.entries(RISK_DEFINITIONS) as [RiskLevel, RiskDefinition][]).map(([level, definition]) => <li key={level} className="colombia-risk-map__legend-item"><span className={`colombia-risk-map__legend-swatch colombia-risk-map__legend-swatch--${level}`} style={{ backgroundColor: definition.color }} aria-hidden="true" /><span>{definition.label}</span><span className="colombia-risk-map__legend-range">{definition.range}</span></li>)}</ul></div>}<figcaption className="colombia-risk-map__caption">{historicalMode ? `${historicalData.length} municipios con coordenadas en el mapa${withoutCoordinates ? ` · ${withoutCoordinates} sin lat/lon (no se dibujan)` : ''}. Seleccionado: ${selectedHistoricalTerritory?.municipality ?? 'ninguno'}.` : dataState === 'live' ? `${riskItems.length} predicciones municipales publicadas por PRORA.` : 'Mapa administrativo de Colombia. Entrene y active un modelo para ver la capa de riesgo.'}</figcaption></div>
     </figure>
   )
 }

@@ -395,7 +395,17 @@ kbd { padding: 5px 7px; color: #839594; background: #f0f4f3; border: 1px solid #
 .colombia-risk-map__eyebrow { margin: 0; color: #1a866c; font-size: 8px; font-weight: 800; letter-spacing: .7px; text-transform: uppercase; }
 .colombia-risk-map__title { margin: 5px 0 0; color: var(--navy-deep); font: 700 16px 'Manrope'; letter-spacing: -.45px; }
 .colombia-risk-map__horizon { padding: 6px 9px; color: #14705f; background: #e8f5f0; border-radius: 8px; font-size: 8px; font-weight: 800; }
-.colombia-risk-map__canvas { position: relative; display: grid; place-items: center; height: 405px; margin: 7px 0; overflow: hidden; background: radial-gradient(circle at 51% 50%, #e9f4ef 0, #f8fbfa 58%, #fbfcfc 74%); border: 1px solid #edf2f0; border-radius: 14px; }
+.colombia-risk-map__canvas { position: relative; display: grid; place-items: center; height: 405px; overflow: hidden; background: radial-gradient(circle at 51% 50%, #e9f4ef 0, #f8fbfa 58%, #fbfcfc 74%); border: 1px solid #edf2f0; border-radius: 14px; }
+.colombia-risk-map__stage { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(210px, .72fr); gap: 12px; align-items: stretch; margin: 7px 0; }
+.colombia-risk-map__dock { display: flex; flex-direction: column; gap: 8px; min-height: 405px; padding: 14px; background: #fff; border: 1px solid #dce8e5; border-radius: 14px; box-shadow: 0 8px 20px rgba(19,65,61,.06); }
+.colombia-risk-map__dock-place { margin: 0; color: #6d8581; font-size: 8px; font-weight: 700; }
+.colombia-risk-map__dock-empty { display: grid; gap: 6px; margin: auto 0; color: #6d8581; text-align: left; }
+.colombia-risk-map__dock-empty strong { color: #1e4f4a; font-size: 11px; }
+.colombia-risk-map__dock-empty span { font-size: 8.5px; line-height: 1.45; }
+.colombia-risk-map__dock .colombia-risk-map__tooltip-metrics { grid-template-columns: 1fr 1fr; }
+.colombia-risk-map__dock .colombia-risk-map__tooltip-heading strong { font-size: 12px; }
+.colombia-risk-map__dock .colombia-risk-map__tooltip-metrics dd { font-size: 11px; }
+.colombia-risk-map__dock .colombia-risk-map__tooltip-signal { font-size: 8px; line-height: 1.4; }
 .colombia-risk-map__canvas::before { content: ''; position: absolute; inset: 0; opacity: .48; background-image: linear-gradient(#e2ebe8 1px, transparent 1px), linear-gradient(90deg, #e2ebe8 1px, transparent 1px); background-size: 28px 28px; mask-image: radial-gradient(circle, black 20%, transparent 76%); }
 .colombia-risk-map__loading { position: absolute; z-index: 3; display: flex; align-items: center; gap: 9px; padding: 10px 13px; color: #51716d; background: rgba(255,255,255,.92); border: 1px solid #dbe9e5; border-radius: 10px; box-shadow: 0 10px 24px rgba(16,69,61,.1); font-size: 9px; font-weight: 700; }
 .colombia-risk-map__loading i { width: 14px; height: 14px; border: 2px solid #b8d9d0; border-top-color: #14816c; border-radius: 50%; animation: mapLoading .75s linear infinite; }
@@ -920,6 +930,8 @@ kbd { padding: 5px 7px; color: #839594; background: #f0f4f3; border: 1px solid #
   .dashboard .metric-card { min-height: 111px; }
   .map-card { min-height: 500px; padding: 14px; }
   .colombia-risk-map__canvas { height: 365px; }
+  .colombia-risk-map__stage { grid-template-columns: 1fr; }
+  .colombia-risk-map__dock { min-height: 0; }
   .colombia-risk-map__svg { height: 350px; }
   .colombia-risk-map__footer { align-items: flex-start; flex-direction: column; }
   .colombia-risk-map__caption { max-width: none; text-align: left; }
