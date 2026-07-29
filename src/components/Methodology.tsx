@@ -205,7 +205,42 @@ export default function Methodology() {
       </section>
 
       {state === 'loading' && <div className="content-card empty-state"><LoaderCircle className="spin" size={30} /><h2>Consultando el registro</h2><p>Recuperando versiones, métricas y linaje del modelo.</p></div>}
-      {state === 'empty' && <div className="content-card empty-state"><BrainCircuit size={30} /><h2>Sin modelo registrado</h2><p>No existe una versión para {modelLabel} con horizonte de {horizon} semanas.</p></div>}
+      {state === 'empty' && (
+        <div className="content-card methodology-empty-panel">
+          <div className="methodology-empty-panel__intro">
+            <span><BrainCircuit size={22} /></span>
+            <div>
+              <h2>Sin modelo registrado · {modelLabel} H{horizon}</h2>
+              <p>
+                {selectedReadiness
+                  ? 'El semáforo de evidencia ya tiene datos observados, pero aún no hay una versión entrenada para este horizonte. La ficha inferior se conecta a ese diagnóstico.'
+                  : `No existe una versión para ${modelLabel} con horizonte de ${horizon} semanas.`}
+              </p>
+            </div>
+          </div>
+          <ul className="methodology-empty-facts">
+            <li><span>Observaciones</span><strong>{selectedReadiness ? selectedReadiness.data.observed_rows.toLocaleString('es-CO') : '—'}</strong></li>
+            <li><span>Territorios</span><strong>{selectedReadiness ? selectedReadiness.data.territories.toLocaleString('es-CO') : '—'}</strong></li>
+            <li><span>Semanas únicas</span><strong>{selectedReadiness ? selectedReadiness.data.unique_weeks.toLocaleString('es-CO') : '—'}</strong></li>
+            <li><span>Horizontes entrenados</span><strong>{trainedHorizons.length}/2</strong></li>
+            <li><span>Nivel de evidencia</span><strong>{selectedReadiness ? (selectedReadiness.readiness_level === 'operational' ? 'Operacional' : selectedReadiness.readiness_level === 'research_only' ? 'Solo investigación' : 'Insuficiente') : 'Sin diagnóstico'}</strong></li>
+            <li><span>Corte epidemiológico</span><strong>{selectedReadiness ? formatDate(selectedReadiness.data.week_end) : '—'}</strong></li>
+          </ul>
+          {selectedReadiness?.limitations?.length ? (
+            <div className="readiness-limitations">
+              <span>Bloqueos que impiden el registro del modelo</span>
+              <ul>{selectedReadiness.limitations.map((item) => <li key={item}><TriangleAlert size={14} /> {limitationLabels[item] ?? readableLabel(item)}</li>)}</ul>
+            </div>
+          ) : null}
+          <div className="methodology-empty-actions">
+            <button className="button button-secondary" type="button" onClick={() => setReloadKey((value) => value + 1)}><RefreshCw size={16} /> Actualizar registro</button>
+            <div className="technical-note" style={{ margin: 0, flex: '1 1 240px' }}>
+              <Info size={16} />
+              <span><strong>Siguiente paso operativo</strong> Complete la sincronización territorial y ejecute el entrenamiento H{horizon} para poblar esta ficha con métricas y traza.</span>
+            </div>
+          </div>
+        </div>
+      )}
       {state === 'error' && <div className="content-card empty-state"><Info size={30} /><h2>Registro no disponible</h2><p>No fue posible consultar los endpoints de modelos. No se muestran valores de respaldo.</p><button className="button button-secondary" type="button" onClick={() => setReloadKey((value) => value + 1)}>Reintentar</button></div>}
 
       {state === 'live' && (

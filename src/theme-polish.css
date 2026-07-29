@@ -1388,6 +1388,212 @@ textarea:focus-visible {
 :root[data-theme='dark'] .colombia-risk-map__risk-badge--alto { color: #ffb383; background: rgba(198, 91, 41, .21); }
 :root[data-theme='dark'] .colombia-risk-map__risk-badge--critico { color: #ff9eaa; background: rgba(192, 61, 78, .23); }
 
+:root[data-theme='dark'] .colombia-risk-map__dock,
+:root[data-theme='dark'] .colombia-risk-map__tooltip {
+  color: var(--ink);
+  background: #152b33;
+  border-color: rgba(145, 192, 188, .2);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, .28);
+}
+:root[data-theme='dark'] .colombia-risk-map__dock-place,
+:root[data-theme='dark'] .colombia-risk-map__tooltip-signal,
+:root[data-theme='dark'] .colombia-risk-map__tooltip-metrics dt,
+:root[data-theme='dark'] .colombia-risk-map__dock-empty { color: #9bb4b1; }
+:root[data-theme='dark'] .colombia-risk-map__history-badge {
+  color: #9ce9d3;
+  background: rgba(49, 164, 134, .18);
+}
+:root[data-theme='dark'] .colombia-risk-map__dock .colombia-risk-map__tooltip-heading strong {
+  color: #f2fbf8;
+}
+:root[data-theme='dark'] .colombia-risk-map__tooltip-metrics { border-color: rgba(145, 192, 188, .14); }
+
+:root[data-theme='dark'] .territory-summary,
+:root[data-theme='dark'] .explain-next-step,
+:root[data-theme='dark'] .technical-note {
+  color: #b7cecb;
+  background: #173038;
+  border-color: rgba(145, 192, 188, .16);
+}
+:root[data-theme='dark'] .territory-summary strong,
+:root[data-theme='dark'] .explain-next-step strong,
+:root[data-theme='dark'] .technical-note strong { color: #e8f6f2; }
+:root[data-theme='dark'] .territory-summary p { color: #a4bbb8; }
+:root[data-theme='dark'] .territory-summary__facts li {
+  background: rgba(12, 28, 34, .55);
+  border-color: rgba(145, 192, 188, .14);
+}
+:root[data-theme='dark'] .territory-summary__facts span { color: #8aa3a0; }
+:root[data-theme='dark'] .territory-summary__facts strong { color: #e6f4f0; }
+:root[data-theme='dark'] .territory-score { box-shadow: inset 0 0 0 8px #13262d; }
+
+:root[data-theme='dark'] .catalog-toolbar .search-field,
+:root[data-theme='dark'] .catalog-toolbar select,
+:root[data-theme='dark'] .input-with-icon,
+:root[data-theme='dark'] .filter-bar .search-field,
+:root[data-theme='dark'] .filter-bar .select-with-icon,
+:root[data-theme='dark'] .filter-bar select {
+  color: var(--ink);
+  background: #152b32;
+  border-color: rgba(145, 192, 188, .18);
+}
+:root[data-theme='dark'] .catalog-toolbar .search-field input,
+:root[data-theme='dark'] .input-with-icon input,
+:root[data-theme='dark'] .filter-bar .search-field input {
+  color: #e5f0ee;
+  background: transparent;
+}
+:root[data-theme='dark'] .source-status-row .status-pill,
+:root[data-theme='dark'] .source-status-row .catalog-state {
+  border: 1px solid rgba(145, 192, 188, .14);
+}
+:root[data-theme='dark'] .status-actualizada { color: #8fdfc0; background: rgba(39, 151, 105, .18); }
+:root[data-theme='dark'] .status-validando { color: #f0d27a; background: rgba(172, 130, 32, .18); }
+:root[data-theme='dark'] .status-programada { color: #9ec0d4; background: rgba(84, 115, 138, .22); }
+:root[data-theme='dark'] .status-error { color: #f1a0aa; background: rgba(169, 68, 82, .22); }
+:root[data-theme='dark'] .source-identity > span,
+:root[data-theme='dark'] .source-permission-note { color: #93acab; }
+:root[data-theme='dark'] .source-metadata,
+:root[data-theme='dark'] .next-sync {
+  background: #10242c;
+  border: 1px solid rgba(145, 192, 188, .12);
+}
+:root[data-theme='dark'] .source-metadata dt { color: #8aa3a0; }
+:root[data-theme='dark'] .source-metadata dd { color: #d7ebe6; }
+:root[data-theme='dark'] .trace-kv-panel h3 { color: #e8f6f2; }
+:root[data-theme='dark'] .ai-badge {
+  color: #9ce9d3;
+  background: rgba(49, 164, 134, .18);
+}
+:root[data-theme='dark'] .source-card {
+  background: #122830;
+  border-color: rgba(145, 192, 188, .14);
+}
+
+:root[data-theme='dark'] input:-webkit-autofill,
+:root[data-theme='dark'] input:-webkit-autofill:hover,
+:root[data-theme='dark'] input:-webkit-autofill:focus,
+:root[data-theme='dark'] textarea:-webkit-autofill,
+:root[data-theme='dark'] select:-webkit-autofill {
+  -webkit-text-fill-color: #e5f0ee;
+  caret-color: #e5f0ee;
+  transition: background-color 99999s ease-out;
+  box-shadow: 0 0 0 1000px #152b32 inset;
+  border-color: rgba(145, 192, 188, .22);
+}
+
+.observed-signal-banner {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  color: #4f6d6b;
+  background: #eef6f3;
+  border: 1px solid #d7e8e2;
+  border-radius: 11px;
+}
+.observed-signal-banner strong { color: #1f4f4a; font-size: 10px; }
+.observed-signal-banner p { margin: 0; font-size: 8.5px; line-height: 1.45; }
+.observed-signal-list { display: grid; gap: 8px; margin-top: 10px; }
+.observed-signal-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  background: #f7fbf9;
+  border: 1px solid #e1ebe8;
+  border-radius: 10px;
+}
+.observed-signal-row strong { display: block; color: #24484c; font-size: 10px; }
+.observed-signal-row small { color: #7d9492; font-size: 8px; }
+.observed-signal-row > span { color: #1f6558; font-size: 11px; font-weight: 800; text-align: right; }
+
+.methodology-empty-panel {
+  display: grid;
+  gap: 16px;
+  padding: 22px;
+  background: linear-gradient(160deg, #f4faf8, #eef7f4 60%, #e7f3ef);
+  border: 1px solid #d7e8e2;
+  border-radius: 14px;
+}
+.methodology-empty-panel__intro {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 14px;
+  align-items: start;
+}
+.methodology-empty-panel__intro > span {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  color: #147760;
+  background: rgba(20, 119, 96, .1);
+  border-radius: 12px;
+}
+.methodology-empty-panel h2 { margin: 0 0 4px; color: #1e4f4a; font-size: 16px; }
+.methodology-empty-panel p { margin: 0; color: #5f7775; font-size: 10px; line-height: 1.5; }
+.methodology-empty-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.methodology-empty-facts li {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  background: rgba(255,255,255,.7);
+  border: 1px solid #dceae5;
+  border-radius: 10px;
+}
+.methodology-empty-facts span { color: #7d9492; font-size: 7.5px; font-weight: 700; text-transform: uppercase; }
+.methodology-empty-facts strong { color: #24484c; font-size: 12px; }
+.methodology-empty-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; }
+
+@media (max-width: 760px) {
+  .methodology-empty-facts { grid-template-columns: 1fr; }
+  .territory-summary__body { grid-template-columns: 1fr; }
+  .territory-summary__facts { grid-template-columns: 1fr; }
+}
+
+:root[data-theme='dark'] .observed-signal-banner {
+  color: #b7cecb;
+  background: #173038;
+  border-color: rgba(145, 192, 188, .16);
+}
+:root[data-theme='dark'] .observed-signal-banner strong { color: #e8f6f2; }
+:root[data-theme='dark'] .observed-signal-list {
+  border-color: rgba(145, 192, 188, .16);
+}
+:root[data-theme='dark'] .observed-signal-row {
+  background: #13262d;
+  border-color: rgba(145, 192, 188, .14);
+}
+:root[data-theme='dark'] .observed-signal-row strong { color: #e8f6f2; }
+:root[data-theme='dark'] .observed-signal-row small { color: #9bb4b1; }
+:root[data-theme='dark'] .observed-signal-row > span { color: #9ce9d3; }
+
+:root[data-theme='dark'] .methodology-empty-panel {
+  background: linear-gradient(160deg, #132a32, #0f242c 55%, #12363a);
+  border-color: rgba(145, 192, 188, .18);
+}
+:root[data-theme='dark'] .methodology-empty-panel h2,
+:root[data-theme='dark'] .methodology-empty-facts strong { color: #eaf7f3; }
+:root[data-theme='dark'] .methodology-empty-panel p,
+:root[data-theme='dark'] .methodology-empty-facts span { color: #9bb4b1; }
+:root[data-theme='dark'] .methodology-empty-facts li {
+  background: rgba(12, 28, 34, .55);
+  border-color: rgba(145, 192, 188, .14);
+}
+:root[data-theme='dark'] .methodology-empty-panel__intro > span {
+  color: #8fdfc0;
+  background: rgba(39, 151, 105, .16);
+}
+
 :root[data-theme='dark'] .model-version-card span,
 :root[data-theme='dark'] .model-version-card small { color: #98b1ae; }
 :root[data-theme='dark'] .model-version-card strong { color: #e6f5f1; }

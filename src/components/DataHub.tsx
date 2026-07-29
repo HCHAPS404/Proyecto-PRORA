@@ -54,11 +54,48 @@ const formatDate = (value?: string | null) => {
     timeStyle: /^\d{4}-\d{2}-\d{2}$/.test(value) ? undefined : 'short',
   }).format(parsed)
 }
-const formatValue = (value: unknown) => {
+const formatValue = (value: unknown): string => {
   if (value == null || value === '') return 'No informado'
   if (typeof value === 'boolean') return value ? 'Sí' : 'No'
-  if (typeof value === 'object') return JSON.stringify(value)
-  return String(value)
+  if (typeof value === 'number') return Number.isFinite(value) ? numberFormat.format(value) : String(value)
+  if (Array.isArray(value)) {
+    if (!value.length) return 'Vacío'
+    if (value.every((item) => typeof item === 'string' || typeof item === 'number')) {
+      const preview = value.slice(0, 8).map(String)
+      return value.length > 8 ? `${preview.join(', ')} · +${value.length - 8}` : preview.join(', ')
+    }
+    return `${value.length} elementos`
+  }
+  if (typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+    if (!entries.length) return 'Vacío'
+    if (entries.length <= 4 && entries.every(([, item]) => item == null || ['string', 'number', 'boolean'].includes(typeof item))) {
+      return entries.map(([key, item]) => `${key}: ${formatValue(item)}`).join(' · ')
+    }
+    return `${entries.length} campos`
+  }
+  const text = String(value)
+  return text.length > 140 ? `${text.slice(0, 137)}…` : text
+}
+
+function TraceMetadata({ title, data }: { title: string; data: Record<string, unknown> }) {
+  const entries = Object.entries(data)
+  if (!entries.length) {
+    return <div className="technical-note"><Info size={16} /><span>Sin datos publicados en {title.toLocaleLowerCase('es')}.</span></div>
+  }
+  return (
+    <div className="trace-kv-panel">
+      <h3>{title}</h3>
+      <dl className="source-metadata source-metadata--trace">
+        {entries.map(([key, value]) => (
+          <div key={key}>
+            <dt>{key.replace(/_/g, ' ')}</dt>
+            <dd title={typeof value === 'object' ? JSON.stringify(value) : String(value ?? '')}>{formatValue(value)}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  )
 }
 const shortHash = (value?: string | null) => value ? `${value.slice(0, 12)}…${value.slice(-8)}` : 'No informado'
 
@@ -359,7 +396,7 @@ export default function DataHub({ onNotify }: DataHubProps) {
             </div>
             <div className="source-status-row">
               <span className={`status-pill status-${status.className}`}><StatusIcon className={run?.status === 'running' ? 'spin' : ''} size={13} /> {runsState === 'unavailable' ? 'Historial no disponible' : status.label}</span>
-              <span className={`catalog-state status-${availability.className}`}>Catálogo: {availability.label}</span>
+              <span className={`catalog-state status-${availability.className}`}>Catálogo · {availability.label}</span>
             </div>
             <div className="source-identity"><span>{source.institution}</span><h3>{source.name}</h3><p>{reason || `${kind.detail}. Cobertura declarada: ${coverage || 'no informada'}.`}</p></div>
             <dl className="source-metadata">
@@ -389,7 +426,28 @@ export default function DataHub({ onNotify }: DataHubProps) {
           {!selectedSource && <div className="empty-state"><Database size={28} /><h3>Sin fuente seleccionada</h3><p>El catálogo debe contener al menos una fuente para mostrar su traza.</p></div>}
           {selectedSource && runsState === 'unavailable' && <div className="empty-state"><Info size={28} /><h3>Historial no disponible</h3><p>El catálogo respondió, pero la API de ejecuciones no estuvo disponible. No se interpreta como ausencia de ingestas.</p></div>}
           {selectedSource && runsState === 'available' && !selectedRun && <div className="empty-state"><Info size={28} /><h3>Sin ejecuciones registradas</h3><p>{selectedSource.name} no tiene una ingesta visible en el historial consultado.</p></div>}
-          {selectedSource && selectedRun && <><div className="traceability-steps"><span><small>ID de ejecución</small><strong>{selectedRun.id}</strong></span><span><small>Inicio</small><strong>{formatDate(selectedRun.started_at)}</strong></span><span><small>Checksum SHA-256</small><strong title={selectedRun.checksum ?? ''}>{shortHash(selectedRun.checksum)}</strong></span><span><small>Objeto del manifiesto</small><strong title={manifest?.object_sha256 ?? ''}>{shortHash(manifest?.object_sha256)}</strong></span></div><div className="metric-strip"><article className="metric-card compact"><span className="metric-icon"><Database size={18} /></span><div><strong>{numberFormat.format(selectedRun.rows_read)}</strong><span>filas leídas</span></div></article><article className="metric-card compact"><span className="metric-icon"><CheckCircle2 size={18} /></span><div><strong>{numberFormat.format(selectedRun.rows_accepted)}</strong><span>aceptadas</span></div></article><article className="metric-card compact"><span className="metric-icon"><XCircle size={18} /></span><div><strong>{numberFormat.format(selectedRun.rows_rejected)}</strong><span>rechazadas</span></div></article></div><div className="methodology-grid"><div><h3>Reporte de calidad</h3>{Object.keys(selectedRun.quality_report ?? {}).length ? <dl className="source-metadata">{Object.entries(selectedRun.quality_report).map(([key, value]) => <div key={key}><dt>{key.replace(/_/g, ' ')}</dt><dd>{formatValue(value)}</dd></div>)}</dl> : <div className="technical-note"><Info size={16} /><span>La ejecución no publicó un reporte de calidad.</span></div>}</div><div><h3>Procedencia y manifiesto</h3>{selectedRun.provenance && Object.keys(selectedRun.provenance).length || manifest && Object.keys(manifest.manifest).length ? <dl className="source-metadata">{Object.entries({ ...(selectedRun.provenance ?? {}), ...(manifest?.manifest ?? {}) }).map(([key, value]) => <div key={key}><dt>{key.replace(/_/g, ' ')}</dt><dd>{formatValue(value)}</dd></div>)}</dl> : <div className="technical-note"><Info size={16} /><span>La API no publicó procedencia o manifiesto para esta ejecución.</span></div>}</div></div>{selectedRun.error_message && <div className="inline-notice"><XCircle size={16} /> {selectedRun.error_message}</div>}</>}
+          {selectedSource && selectedRun && <>
+            <div className="traceability-steps">
+              <span><small>ID de ejecución</small><strong title={selectedRun.id}>{selectedRun.id.slice(0, 18)}{selectedRun.id.length > 18 ? '…' : ''}</strong></span>
+              <span><small>Inicio</small><strong>{formatDate(selectedRun.started_at)}</strong></span>
+              <span><small>Checksum SHA-256</small><strong title={selectedRun.checksum ?? ''}>{shortHash(selectedRun.checksum)}</strong></span>
+              <span><small>Objeto del manifiesto</small><strong title={manifest?.object_sha256 ?? ''}>{shortHash(manifest?.object_sha256)}</strong></span>
+            </div>
+            <div className="metric-strip">
+              <article className="metric-card compact"><span className="metric-icon"><Database size={18} /></span><div><strong>{numberFormat.format(selectedRun.rows_read)}</strong><span>filas leídas</span></div></article>
+              <article className="metric-card compact"><span className="metric-icon"><CheckCircle2 size={18} /></span><div><strong>{numberFormat.format(selectedRun.rows_accepted)}</strong><span>aceptadas</span></div></article>
+              <article className="metric-card compact"><span className="metric-icon"><XCircle size={18} /></span><div><strong>{numberFormat.format(selectedRun.rows_rejected)}</strong><span>rechazadas</span></div></article>
+            </div>
+            <div className="methodology-grid trace-detail-grid">
+              {Object.keys(selectedRun.quality_report ?? {}).length
+                ? <TraceMetadata title="Reporte de calidad" data={selectedRun.quality_report as Record<string, unknown>} />
+                : <div className="trace-kv-panel"><h3>Reporte de calidad</h3><div className="technical-note"><Info size={16} /><span>La ejecución no publicó un reporte de calidad.</span></div></div>}
+              {(selectedRun.provenance && Object.keys(selectedRun.provenance).length) || (manifest && Object.keys(manifest.manifest).length)
+                ? <TraceMetadata title="Procedencia y manifiesto" data={{ ...(selectedRun.provenance ?? {}), ...(manifest?.manifest ?? {}) }} />
+                : <div className="trace-kv-panel"><h3>Procedencia y manifiesto</h3><div className="technical-note"><Info size={16} /><span>La API no publicó procedencia o manifiesto para esta ejecución.</span></div></div>}
+            </div>
+            {selectedRun.error_message && <div className="inline-notice"><XCircle size={16} /> {selectedRun.error_message}</div>}
+          </>}
         </article>
 
         <aside className="content-card integration-summary">

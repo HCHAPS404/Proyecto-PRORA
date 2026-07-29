@@ -445,7 +445,33 @@ export default function Dashboard({ onOpenAlerts, onOpenData, onNotify }: Dashbo
         <article className="content-card explain-card">
           <div className="card-heading-row"><div><span className="eyebrow">¿Por qué esta alerta?</span><h2>Factores publicados por el modelo</h2></div><span className="ai-badge"><Sparkles size={13} /> Explicabilidad</span></div>
           {detailState === 'loading' && <div className="empty-state"><LoaderCircle className="spin" size={25} /><p>Consultando explicación…</p></div>}
-          {detailState !== 'loading' && explanation ? <><div className="territory-summary"><div className="territory-score" style={{ '--risk-score': Math.max(0, Math.min(100, explanation.risk_score)) } as CSSProperties}><span>{formatNumber(explanation.risk_score)}</span><small>Riesgo / 100</small></div><p><strong>{selectedRisk?.municipality}</strong> · modelo {explanation.model_version}. Los factores se muestran tal como fueron registrados para esta predicción.</p></div>{explanation.drivers.length ? <div className="driver-list">{explanation.drivers.map((driver, index) => { const value = driverValue(driver); return <div className="driver-row" key={`${driverLabel(driver)}-${index}`}><span className="driver-icon driver-icon--blue"><BrainCircuit size={17} /></span><span className="driver-copy"><strong>{driverLabel(driver)}</strong><small>{String(driver.detail ?? driver.direction ?? 'Sin detalle adicional')}</small></span><span className="driver-graph"><i style={{ width: value == null ? '0%' : `${Math.max(2, Math.abs(value) / driverMaximum * 100)}%` }} /></span><b>{value == null ? '—' : formatNumber(value)}</b></div>})}</div> : <div className="empty-state"><Info size={24} /><h3>Sin factores publicados</h3><p>La predicción existe, pero no incluye contribuciones locales.</p></div>}{readingMode === 'advanced' && <div className="technical-note"><BrainCircuit size={17} /><span><strong>Advertencias del modelo</strong> {explanation.warnings.length ? explanation.warnings.join(' · ') : 'No se publicaron advertencias para esta predicción.'}</span></div>}</> : detailState !== 'loading' && selectedObservedTerritory ? <div className="territory-summary"><div className="territory-score" style={{ '--risk-score': Math.min(100, selectedObservedTerritory.latest_observed_cases) } as CSSProperties}><span>{formatNumber(selectedObservedTerritory.latest_observed_cases)}</span><small>Casos último corte</small></div><p><strong>{selectedObservedTerritory.municipality}</strong> · lectura histórica. Aún no hay factores SHAP/modelo porque no hay pronóstico publicado. Serie: {formatNumber(selectedObservedTerritory.observation_rows)} cortes · {formatDate(selectedObservedTerritory.first_week)} → {formatDate(selectedObservedTerritory.latest_week)} · {formatNumber(selectedObservedTerritory.total_observed_cases)} casos acumulados.</p><div className="technical-note"><Info size={16} /><span><strong>Siguiente paso</strong> Entrene un modelo (dengue h3/h4) para habilitar predicción IA, factores publicados y alertas numéricas de riesgo.</span></div></div> : detailState !== 'loading' && <div className="empty-state"><Info size={25} /><h3>Sin explicación disponible</h3><p>Seleccione un territorio de análisis para consultar la información disponible.</p></div>}
+          {detailState !== 'loading' && explanation ? <><div className="territory-summary"><div className="territory-score" style={{ '--risk-score': Math.max(0, Math.min(100, explanation.risk_score)) } as CSSProperties}><span>{formatNumber(explanation.risk_score)}</span><small>Riesgo / 100</small></div><p><strong>{selectedRisk?.municipality}</strong> · modelo {explanation.model_version}. Los factores se muestran tal como fueron registrados para esta predicción.</p></div>{explanation.drivers.length ? <div className="driver-list">{explanation.drivers.map((driver, index) => { const value = driverValue(driver); return <div className="driver-row" key={`${driverLabel(driver)}-${index}`}><span className="driver-icon driver-icon--blue"><BrainCircuit size={17} /></span><span className="driver-copy"><strong>{driverLabel(driver)}</strong><small>{String(driver.detail ?? driver.direction ?? 'Sin detalle adicional')}</small></span><span className="driver-graph"><i style={{ width: value == null ? '0%' : `${Math.max(2, Math.abs(value) / driverMaximum * 100)}%` }} /></span><b>{value == null ? '—' : formatNumber(value)}</b></div>})}</div> : <div className="empty-state"><Info size={24} /><h3>Sin factores publicados</h3><p>La predicción existe, pero no incluye contribuciones locales.</p></div>}{readingMode === 'advanced' && <div className="technical-note"><BrainCircuit size={17} /><span><strong>Advertencias del modelo</strong> {explanation.warnings.length ? explanation.warnings.join(' · ') : 'No se publicaron advertencias para esta predicción.'}</span></div>}</> : detailState !== 'loading' && selectedObservedTerritory ? (
+            <div className="territory-summary territory-summary--stack">
+              <div className="territory-summary__body">
+                <div className="territory-score" style={{ '--risk-score': Math.min(100, selectedObservedTerritory.latest_observed_cases) } as CSSProperties}>
+                  <span>{formatNumber(selectedObservedTerritory.latest_observed_cases)}</span>
+                  <small>Casos último corte</small>
+                </div>
+                <p>
+                  <strong>{selectedObservedTerritory.municipality}</strong> · lectura histórica.
+                  Aún no hay factores SHAP/modelo porque no hay pronóstico publicado.
+                </p>
+              </div>
+              <ul className="territory-summary__facts">
+                <li><span>Serie observada</span><strong>{formatNumber(selectedObservedTerritory.observation_rows)} cortes</strong></li>
+                <li><span>Periodo</span><strong>{formatDate(selectedObservedTerritory.first_week)} → {formatDate(selectedObservedTerritory.latest_week)}</strong></li>
+                <li><span>Casos acumulados</span><strong>{formatNumber(selectedObservedTerritory.total_observed_cases)}</strong></li>
+                <li><span>Departamento</span><strong>{selectedObservedTerritory.department}</strong></li>
+              </ul>
+              <div className="explain-next-step">
+                <Info size={16} />
+                <span>
+                  <strong>Siguiente paso</strong>
+                  Entrene un modelo ({diseaseId} h3/h4) para habilitar predicción IA, factores publicados y alertas numéricas de riesgo.
+                </span>
+              </div>
+            </div>
+          ) : detailState !== 'loading' && <div className="empty-state"><Info size={25} /><h3>Sin explicación disponible</h3><p>Seleccione un territorio de análisis para consultar la información disponible.</p></div>}
         </article>
 
         <article className="content-card history-card">
