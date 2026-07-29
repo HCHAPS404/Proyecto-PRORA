@@ -11,7 +11,8 @@ from typing import Any
 
 import anyio
 import httpx
-from sqlalchemy import select, text as sa_text
+from sqlalchemy import select
+from sqlalchemy import text as sa_text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.connectors import (
@@ -25,8 +26,8 @@ from app.connectors import (
     IDEAMStationsConnector,
     Operator,
     PAIConnector,
-    SIVIGILAConnector,
     SafeQuery,
+    SIVIGILAConnector,
     SocrataClient,
     sivigila_2024_event_files,
 )
@@ -1250,7 +1251,8 @@ async def _sync_irca(
             for row in page:
                 row_number += 1
                 code = str(row.get("municipiocodigo") or "").strip().zfill(5)
-                if not code.isdigit() or code in {"00000"} or "#" in str(row.get("municipiocodigo") or ""):
+                raw_code = str(row.get("municipiocodigo") or "")
+                if not code.isdigit() or code in {"00000"} or "#" in raw_code:
                     rejected += 1
                     await add_quarantine(
                         session,
@@ -1291,7 +1293,13 @@ async def _sync_irca(
                     continue
                 batch.append((code, year, irca))
                 accepted += 1
-        artifact = writer.finalize(extra={"adapter": "irca_municipal", "year_from": year_from, "year_to": year_to})
+        artifact = writer.finalize(
+            extra={
+                "adapter": "irca_municipal",
+                "year_from": year_from,
+                "year_to": year_to,
+            }
+        )
     except Exception:
         writer.abort()
         raise

@@ -12,11 +12,6 @@ from .sivigila_microdata import (
     SIVIGILAMicrodataMeasure,
     sivigila_2024_event_files,
 )
-from .territorial_sivigila import (
-    FEDERATION_SOURCE_ID,
-    TerritorialSourceProfile,
-    territorial_profiles,
-)
 from .socrata import (
     Aggregate,
     Filter,
@@ -26,6 +21,11 @@ from .socrata import (
     SafeQuery,
     SelectExpression,
     SocrataClient,
+)
+from .territorial_sivigila import (
+    FEDERATION_SOURCE_ID,
+    TerritorialSourceProfile,
+    territorial_profiles,
 )
 
 __all__ = [

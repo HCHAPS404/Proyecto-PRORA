@@ -9,11 +9,11 @@ nominal attributes are never persisted.
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from app.connectors.sivigila import EVENT_TO_DISEASE, PRIORITIZED_EVENT_CODES
+from app.connectors.sivigila import EVENT_TO_DISEASE
 from app.ingestion.divipola import normalize_name
 
 RowKind = Literal["aggregate", "case"]
@@ -125,7 +125,10 @@ TERRITORIAL_SIVIGILA_PROFILES: tuple[TerritorialSourceProfile, ...] = (
         year_to=2023,
         diseases=("dengue", "chikunguna", "leishmaniasis", "ira", "malaria", "zika"),
         endpoint="https://www.datos.gov.co/resource/tz38-fg9k.json",
-        notes="Agregado municipio/semana/evento. Filtra por nombre para evitar códigos reutilizados.",
+        notes=(
+            "Agregado municipio/semana/evento. "
+            "Filtra por nombre para evitar códigos reutilizados."
+        ),
     ),
     TerritorialSourceProfile(
         source_id="sivigila-caqueta-dengue",
@@ -145,7 +148,10 @@ TERRITORIAL_SIVIGILA_PROFILES: tuple[TerritorialSourceProfile, ...] = (
         year_to=2023,
         diseases=("dengue",),
         endpoint="https://www.datos.gov.co/resource/fhz2-4x64.json",
-        notes="Filas individuales; se agregan a municipio/semana. Ver datos.gov.co/qwsm-wq4w (vista).",
+        notes=(
+            "Filas individuales; se agregan a municipio/semana. "
+            "Ver datos.gov.co/qwsm-wq4w (vista)."
+        ),
     ),
     TerritorialSourceProfile(
         source_id="sivigila-pereira-dengue",
@@ -340,7 +346,9 @@ def _as_year(value: Any) -> int | None:
     return _as_int(text)
 
 
-def extract_year_week(row: Mapping[str, Any], fields: TerritorialFieldMap) -> tuple[int, int] | None:
+def extract_year_week(
+    row: Mapping[str, Any], fields: TerritorialFieldMap
+) -> tuple[int, int] | None:
     year = _as_year(row.get(fields.year))
     week = _as_int(row.get(fields.week))
     if year is None or week is None:
