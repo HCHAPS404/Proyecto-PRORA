@@ -36,6 +36,8 @@ services:
         value: "false"
       - key: PRORA_RUN_MIGRATIONS_ON_START
         value: "true"
+      # En free: activar solo cuando la API ya está estable (Environment → true).
+      # El supervisor espera /health antes de cargar el worker (sklearn).
       - key: PRORA_EMBEDDED_WORKER
         value: "false"
       - key: PRORA_WORKER_POLL_SECONDS
