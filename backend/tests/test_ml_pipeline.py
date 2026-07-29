@@ -46,6 +46,7 @@ def _config() -> MLConfig:
         min_train_weeks=36,
         validation_weeks=4,
         n_splits=2,
+        territorial_splits=3,
         enable_lstm=False,
         rf_estimators=28,
         hgb_iterations=35,

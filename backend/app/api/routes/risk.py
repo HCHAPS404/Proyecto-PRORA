@@ -1137,9 +1137,6 @@ async def activate_model_version(
     )
 
 
-    )
-
-
 def _train_job_parameters(settings: Settings, *, force: bool) -> dict[str, Any]:
     """Hyperparameters tuned for Render free when jobs run inline (~512MB)."""
     if settings.jobs_inline:
