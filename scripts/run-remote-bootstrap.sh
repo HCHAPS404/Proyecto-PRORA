@@ -12,6 +12,13 @@ API_BASE="${PRORA_API_BASE:-https://prora-api.onrender.com/api/v1}"
 EMAIL="${PRORA_OPERATOR_EMAIL:-helmut.chs@gmail.com}"
 PASSWORD="${PRORA_OPERATOR_PASSWORD:-ProraOps2026Secure!}"
 
+if [[ "$PASSWORD" == "TuPasswordActual" || -z "$PASSWORD" ]]; then
+  echo "ERROR: PRORA_OPERATOR_PASSWORD no está configurada."
+  echo "  export PRORA_OPERATOR_PASSWORD='ProraOps2026Secure!'   # la del render.yaml"
+  echo "  # o la contraseña que hayas puesto en Render → Environment"
+  exit 1
+fi
+
 echo "==> Esperando redeploy + API lista (${API_BASE%/api/v1}/ready)"
 for _ in $(seq 1 60); do
   if curl -fsS "${API_BASE%/api/v1}/ready" >/dev/null 2>&1; then

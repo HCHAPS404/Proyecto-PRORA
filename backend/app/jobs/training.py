@@ -146,7 +146,7 @@ async def process_training_job(
             pipeline_fingerprint,
         ):
             job.status = PipelineStatus.SUCCEEDED.value
-            job.result = {
+            job.result = _json_safe({
                 "reused": True,
                 "reason": "same_dataset_and_pipeline",
                 "data_fingerprint": dataset.fingerprint,
@@ -160,7 +160,7 @@ async def process_training_job(
                     }
                     for horizon in sorted(existing_champions)
                 ],
-            }
+            })
             job.finished_at = datetime.now(UTC)
             await session.commit()
             return
@@ -369,7 +369,7 @@ async def process_training_job(
             activated_versions[horizon] = version.version
 
         job.status = PipelineStatus.SUCCEEDED.value
-        job.result = {
+        job.result = _json_safe({
             "models": receipts,
             "forecasts_created": len(results),
             "forecasts_operationally_eligible": eligible_count,
@@ -381,7 +381,7 @@ async def process_training_job(
             "training_contract_fingerprint": training_contract_fingerprint,
             "dataset": dataset.manifest,
             "model_readiness": readiness,
-        }
+        })
         job.finished_at = datetime.now(UTC)
         await session.commit()
     except Exception as exc:
