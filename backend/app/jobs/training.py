@@ -29,11 +29,11 @@ from app.models.epidemiology import (
     PipelineStatus,
 )
 
-EXPLANATION_TERRITORY_CHUNK_SIZE = 64
+EXPLANATION_TERRITORY_CHUNK_SIZE = 96
 # Full local explanations for every municipality dominate wall-clock time on
 # national panels. Prioritise high-risk territories; the rest stay auditable
 # via component predictions and can be recomputed later.
-EXPLANATION_PRIORITY_LIMIT = 80
+EXPLANATION_PRIORITY_LIMIT = 48
 EXPLANATION_PRIORITY_PROBABILITY = 0.55
 
 

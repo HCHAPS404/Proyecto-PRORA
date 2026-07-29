@@ -1117,13 +1117,14 @@ async def request_training(
         requested_by=user.id,
         parameters={
             "force": payload.force,
-            # Perfil ligero para plan free (Render): sin LSTM y menos árboles.
+            # Perfil ligero para plan free (Render): sin LSTM, validación acotada.
             "enable_lstm": False,
-            "rf_estimators": 60,
-            "hgb_iterations": 60,
+            "rf_estimators": 48,
+            "hgb_iterations": 48,
             "n_splits": 2,
             "territorial_splits": 2,
             "territorial_meta_splits": 1,
+            "validation_weeks": 3,
         },
     )
     session.add(job)
