@@ -11,8 +11,8 @@ Optional:
   PRORA_TRAIN_ONLY=1       skip sync
   PRORA_FORCE_TRAIN=1      force retrain even if fingerprint matches
   PRORA_SKIP_SLOW=1        skip microdata 2024 and chunked national backfill
-  PRORA_TRAIN_HORIZONS=4   comma list, default 3,4
-  PRORA_DISEASES=dengue,ira  subset to train
+  PRORA_TRAIN_HORIZONS=4   comma list, default 4 (solo h4 en Render free)
+  PRORA_DISEASES=ira,dengue  subset; default ira,leishmaniasis,malaria,dengue
 """
 
 from __future__ import annotations
@@ -70,7 +70,11 @@ SIVIGILA_NATIONAL_WINDOWS: list[tuple[str, str]] = [
     ("2021-01-01", "2023-01-01"),
 ]
 
-DISEASES = ("dengue", "malaria", "chikunguna", "zika", "leishmaniasis", "ira")
+DISEASES = ("ira", "leishmaniasis", "malaria", "dengue", "chikunguna", "zika")
+
+
+def _log(message: str) -> None:
+    print(message, flush=True)
 
 
 def _request(
@@ -162,7 +166,7 @@ def _enqueue_sync(
 
 
 def sync_one(token: str, source_id: str, body: dict[str, Any] | None = None) -> None:
-    print(f"SYNC enqueue {source_id}")
+    print(f"SYNC enqueue {source_id}", flush=True)
     payload = _enqueue_sync(token, source_id, body)
     if payload is None:
         return
@@ -218,7 +222,7 @@ def sync_all(token: str) -> None:
 
 def train_all(token: str) -> None:
     force = os.environ.get("PRORA_FORCE_TRAIN") == "1"
-    horizon_raw = os.environ.get("PRORA_TRAIN_HORIZONS", "3,4")
+    horizon_raw = os.environ.get("PRORA_TRAIN_HORIZONS", "4")
     horizons = sorted({int(item.strip()) for item in horizon_raw.split(",") if item.strip()})
     disease_raw = os.environ.get("PRORA_DISEASES")
     diseases = (
@@ -288,9 +292,9 @@ def verify(token: str) -> int:
 
 
 def main() -> None:
-    print(f"API {API_BASE}")
+    _log(f"API {API_BASE}")
     token = _login()
-    print("login OK")
+    _log("login OK")
     sync_only = os.environ.get("PRORA_SYNC_ONLY") == "1"
     train_only = os.environ.get("PRORA_TRAIN_ONLY") == "1"
     if not train_only:

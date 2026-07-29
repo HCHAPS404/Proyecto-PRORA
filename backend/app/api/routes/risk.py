@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Response, status
 from sqlalchemy import Integer, and_, cast, desc, func, or_, select
@@ -1096,6 +1096,34 @@ async def activate_model_version(
     )
 
 
+    )
+
+
+def _train_job_parameters(settings: Settings, *, force: bool) -> dict[str, Any]:
+    """Hyperparameters tuned for Render free when jobs run inline (~512MB)."""
+    if settings.jobs_inline:
+        return {
+            "force": force,
+            "enable_lstm": False,
+            "rf_estimators": 32,
+            "hgb_iterations": 32,
+            "n_splits": 1,
+            "territorial_splits": 2,
+            "territorial_meta_splits": 1,
+            "validation_weeks": 3,
+        }
+    return {
+        "force": force,
+        "enable_lstm": False,
+        "rf_estimators": 48,
+        "hgb_iterations": 48,
+        "n_splits": 2,
+        "territorial_splits": 2,
+        "territorial_meta_splits": 1,
+        "validation_weeks": 3,
+    }
+
+
 @router.post(
     "/models/train",
     response_model=TrainingJobResponse,
@@ -1115,17 +1143,7 @@ async def request_training(
         disease=payload.disease,
         horizons=horizons,
         requested_by=user.id,
-        parameters={
-            "force": payload.force,
-            # Perfil ligero para plan free (Render): sin LSTM, validación acotada.
-            "enable_lstm": False,
-            "rf_estimators": 48,
-            "hgb_iterations": 48,
-            "n_splits": 2,
-            "territorial_splits": 2,
-            "territorial_meta_splits": 1,
-            "validation_weeks": 3,
-        },
+        parameters=_train_job_parameters(settings, force=payload.force),
     )
     session.add(job)
     await session.commit()
