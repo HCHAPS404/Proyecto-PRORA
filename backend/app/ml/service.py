@@ -261,6 +261,124 @@ class ForecastService:
             by_key[(territory, horizon)] for territory in selected for horizon in selected_horizons
         ]
 
+    def forecast_scenario_rollout(
+        self,
+        history: pd.DataFrame,
+        disease: str,
+        territories: list[str] | None = None,
+        *,
+        horizon: int | None = None,
+        projection_weeks: int | None = None,
+        end_year: int | None = None,
+        versions: dict[int, str] | None = None,
+    ) -> list[ForecastResult]:
+        """Iteratively project forward from the last documented week.
+
+        The model is trained on the full historical panel (e.g. 2022–2025).
+        Exogenous covariates are held at their last known values while
+        seasonality advances with the calendar.  Results are tagged
+        ``scenario_projection`` and are not for same-day operations.
+        """
+
+        disease_key = self.config.assert_disease(disease)
+        step_weeks = int(horizon or max(self.config.horizons))
+        max_weeks = int(projection_weeks or self.config.scenario_projection_weeks)
+        target_year = int(end_year or self.config.scenario_projection_end_year)
+        version = (versions or {}).get(step_weeks)
+        bundle, manifest = self.get_artifact(disease_key, step_weeks, version)
+
+        disease_values = history[self.config.disease_column].astype(str).map(normalize_disease)
+        territory_values = history[self.config.territory_column].astype(str)
+        selected = (
+            [str(value) for value in territories]
+            if territories
+            else sorted(territory_values[disease_values == disease_key].unique().tolist())
+        )
+        today = pd.Timestamp.now(tz="UTC").tz_localize(None).normalize()
+        end_date = pd.Timestamp(year=target_year, month=12, day=31)
+        results: list[ForecastResult] = []
+
+        for territory in selected:
+            scoped = history[
+                (disease_values == disease_key) & (territory_values == territory)
+            ].copy()
+            if scoped.empty:
+                continue
+            scoped = scoped.sort_values(self.config.date_column).reset_index(drop=True)
+            original_cutoff = pd.to_datetime(scoped[self.config.date_column].iloc[-1]).normalize()
+            max_steps = max(1, max_weeks // step_weeks)
+            steps_taken = 0
+
+            while steps_taken < max_steps:
+                engineered = build_weekly_features(scoped, self.config)
+                latest = engineered.iloc[-1]
+                issued = pd.to_datetime(latest[self.config.date_column]).normalize()
+                target = issued + pd.Timedelta(weeks=step_weeks)
+                if target > end_date:
+                    break
+
+                for feature in bundle.feature_names:
+                    if feature not in latest.index:
+                        latest[feature] = np.nan
+                feature_row = latest[bundle.feature_names]
+                missing_fraction = float(feature_row.isna().mean())
+                prediction = float(bundle.predict(feature_row.to_frame().T)[0])
+                lower, upper = bundle.interval(np.asarray([prediction], dtype=float))
+                components = bundle.model.predict_components(feature_row.to_frame().T)
+                threshold = (
+                    float(feature_row["outbreak_threshold"])
+                    if "outbreak_threshold" in feature_row.index
+                    and pd.notna(feature_row["outbreak_threshold"])
+                    else None
+                )
+                probability = float(
+                    bundle.outbreak_probability(
+                        np.asarray([prediction], dtype=float),
+                        territory,
+                        threshold=threshold,
+                    )[0]
+                )
+                observation_age_days = max(0, int((today - original_cutoff).days))
+                warnings = ["scenario_projection"]
+                if missing_fraction > 0.25:
+                    warnings.append("high_feature_missingness")
+                if bundle.model.temporal_backend == "ridge_fallback":
+                    warnings.append("lstm_extra_unavailable_using_deterministic_fallback")
+                if observation_age_days > self.config.max_forecast_data_age_days:
+                    warnings.append("scenario_from_documented_historical_cutoff")
+
+                results.append(
+                    ForecastResult(
+                        disease=disease_key,
+                        territory_id=territory,
+                        issued_week=issued.date().isoformat(),
+                        target_week=target.date().isoformat(),
+                        horizon_weeks=step_weeks,
+                        predicted_cases=round(prediction, 3),
+                        interval_lower=round(float(lower[0]), 3),
+                        interval_upper=round(float(upper[0]), 3),
+                        outbreak_probability=round(probability, 4),
+                        risk_level=_risk_level(probability),
+                        model_version=str(manifest["version"]),
+                        model_components={
+                            name: round(float(values[0]), 3)
+                            for name, values in components.items()
+                        },
+                        data_completeness=round(1.0 - missing_fraction, 4),
+                        operationally_eligible=False,
+                        observation_age_days=observation_age_days,
+                        warnings=warnings,
+                    )
+                )
+
+                synthetic = scoped.iloc[-1].copy()
+                synthetic[self.config.date_column] = target
+                synthetic[self.config.target_column] = max(0.0, prediction)
+                scoped = pd.concat([scoped, pd.DataFrame([synthetic])], ignore_index=True)
+                steps_taken += 1
+
+        return results
+
 
 def _risk_level(probability: float) -> str:
     if probability >= 0.80:

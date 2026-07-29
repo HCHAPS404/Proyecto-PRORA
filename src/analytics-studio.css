@@ -120,6 +120,10 @@
 .analytics-model-metrics svg { position: absolute; top: 10px; right: 10px; color: var(--analytics-primary); }
 .analytics-forecast-context { display: flex; align-items: flex-start; gap: 8px; margin-top: 10px; padding: 10px 14px; background: color-mix(in srgb, var(--analytics-primary) 6%, transparent); border: 1px solid color-mix(in srgb, var(--analytics-primary) 15%, transparent); border-radius: 9px; font-size: 10.5px; color: var(--muted, #5a6e6c); line-height: 1.5; }
 .analytics-forecast-context svg { flex-shrink: 0; margin-top: 1px; color: var(--analytics-primary); }
+.analytics-projection-line { stroke: var(--analytics-ensemble, #3966c5); stroke-width: 2.4; stroke-dasharray: 7 5; }
+.analytics-projection-point { fill: var(--analytics-ensemble, #3966c5); }
+.analytics-cutoff-line { stroke: color-mix(in srgb, var(--analytics-primary) 35%, transparent); stroke-width: 1.2; stroke-dasharray: 4 4; }
+.analytics-legend__line--projected { background: var(--analytics-ensemble, #3966c5); border-style: dashed; }
 
 .analytics-footer { flex-wrap: wrap; justify-content: flex-start; gap: 9px 22px; margin-top: 22px; padding-top: 15px; color: var(--muted, #6e8588); border-top: 1px solid var(--line, #dfe8e6); font-size: 9px; }
 .analytics-footer span { display: inline-flex; align-items: center; gap: 6px; }

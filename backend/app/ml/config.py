@@ -43,6 +43,9 @@ class MLConfig:
     outbreak_quantile: float = 0.80
     conformal_alpha: float = 0.10
     max_forecast_data_age_days: int = 35
+    # Proyección de escenario: semanas hacia adelante desde el último corte documentado.
+    scenario_projection_weeks: int = 104
+    scenario_projection_end_year: int = 2026
     min_observed_training_rows: int = 500
     min_training_territories: int = 20
     # Un año epidemiológico (~52 semanas) basta para investigación con microdatos anuales.

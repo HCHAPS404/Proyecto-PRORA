@@ -93,7 +93,7 @@ export interface RiskMapItem {
   observation_cutoff?: string | null
   observation_age_days?: number | null
   operationally_eligible?: boolean
-  forecast_mode?: 'operational' | 'retrospective_research'
+  forecast_mode?: 'operational' | 'retrospective_research' | 'scenario_projection'
 }
 
 export interface DataSourceRecord {

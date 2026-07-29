@@ -75,7 +75,8 @@ def _get_database_url() -> str:
 
 
 async def publish_disease(db_url: str, disease: str) -> bool:
-    from sqlalchemy import select
+    import pandas as pd
+    from sqlalchemy import delete, select
     from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
     from sqlalchemy.orm import sessionmaker
 
@@ -152,6 +153,21 @@ async def publish_disease(db_url: str, disease: str) -> bool:
             await session.flush()
             log.info(f"  ModelVersion insertada: id={version.id}")
 
+        stale_forecast_ids = list(
+            await session.scalars(
+                select(Forecast.id).where(Forecast.model_version_id == version.id)
+            )
+        )
+        if stale_forecast_ids:
+            await session.execute(
+                delete(AlertEvent).where(AlertEvent.forecast_id.in_(stale_forecast_ids))
+            )
+            removed = await session.execute(
+                delete(Forecast).where(Forecast.model_version_id == version.id)
+            )
+            await session.flush()
+            log.info(f"  Eliminados {removed.rowcount or len(stale_forecast_ids)} forecasts previos")
+
         log.info("  Descargando panel para generar forecasts...")
         dataset = await build_training_dataset(session, disease)
         panel = dataset.frame
@@ -166,11 +182,11 @@ async def publish_disease(db_url: str, disease: str) -> bool:
         config = MLConfig()
         service = ForecastService(registry, config)
 
-        log.info("  Generando forecasts...")
-        results = service.forecast_many(
-            panel, disease, horizons=[horizon], versions={horizon: latest}
+        log.info("  Generando proyección de escenario (histórico → 2026)...")
+        results = service.forecast_scenario_rollout(
+            panel, disease, horizon=horizon, versions={horizon: latest}
         )
-        log.info(f"  {len(results)} forecasts generados")
+        log.info(f"  {len(results)} puntos de escenario generados")
 
         feature_frame = build_weekly_features(panel, config)
         latest_rows = feature_frame.groupby(
@@ -209,22 +225,35 @@ async def publish_disease(db_url: str, disease: str) -> bool:
         readiness = assess_training_frame(panel, disease, config)
         passes_gate = manifest.get("metrics", {}).get("benchmark", {}).get("passes_baseline_gate", False)
 
+        original_cutoffs: dict[str, str] = {}
+        for territory_id in panel[config.territory_column].astype(str).unique():
+            subset = panel[panel[config.territory_column].astype(str) == territory_id]
+            original_cutoffs[territory_id] = pd.to_datetime(
+                subset[config.date_column].max()
+            ).date().isoformat()
+
         eligible_count = 0
         alert_count = 0
         generated_at = datetime.now(UTC)
 
         for result in results:
-            drivers, warning = explanation_map.get(
-                result.territory_id, ([], "explanation_unavailable")
-            )
+            is_first_step = result.issued_week == original_cutoffs.get(result.territory_id)
+            if is_first_step:
+                drivers, warning = explanation_map.get(
+                    result.territory_id, ([], "explanation_unavailable")
+                )
+            else:
+                drivers, warning = [], None
             warnings = list(result.warnings)
             if not readiness.get("operational_forecast_eligible", False):
                 result.operationally_eligible = False
-                warnings.append("training_outcome_not_eligible_for_current_operations")
+                if is_first_step:
+                    warnings.append("training_outcome_not_eligible_for_current_operations")
             if not passes_gate:
                 result.operationally_eligible = False
-                warnings.append("model_did_not_pass_naive_baseline_gate")
-            if warning:
+                if is_first_step:
+                    warnings.append("model_did_not_pass_naive_baseline_gate")
+            if warning and is_first_step:
                 warnings.append(warning)
 
             forecast = Forecast(

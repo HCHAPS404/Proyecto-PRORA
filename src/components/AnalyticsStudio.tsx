@@ -166,60 +166,110 @@ function HistoryInsights({ series, summary }: { series: AnalyticsSeries; summary
   )
 }
 
-function ForecastChart({ forecast, diseaseLabel }: { forecast: AnalyticsForecastSeries; diseaseLabel: string }) {
+function ForecastChart({
+  forecast,
+  series,
+  diseaseLabel,
+}: {
+  forecast: AnalyticsForecastSeries
+  series?: AnalyticsSeries | null
+  diseaseLabel: string
+}) {
   const points = forecast.points
   if (!points.length) return null
+  const scenario = forecast.metadata.forecast_mode === 'scenario_projection'
   const operational = forecast.metadata.forecast_mode === 'operational'
     || forecast.metadata.operationally_eligible === true
   const observationCutoff = typeof forecast.metadata.observation_cutoff === 'string'
     ? forecast.metadata.observation_cutoff
     : null
+  const historicalPoints = (series?.points ?? []).slice(-52)
   const width = 760
-  const height = 282
+  const height = 310
   const left = 58
   const top = 18
   const plotWidth = width - left - 22
-  const plotHeight = height - top - 44
-  const maximum = Math.max(...points.map((point) => point.upper_bound), 1)
-  const x = (index: number) => left + (index / Math.max(points.length - 1, 1)) * plotWidth
+  const plotHeight = height - top - 52
+  const histCount = historicalPoints.length
+  const projCount = points.length
+  const totalSlots = histCount + projCount
+  const xAt = (index: number) => left + (index / Math.max(totalSlots - 1, 1)) * plotWidth
+  const histX = (index: number) => xAt(index)
+  const projX = (index: number) => xAt(histCount + index)
+  const maximum = Math.max(
+    ...historicalPoints.map((point) => point.observed_cases),
+    ...points.map((point) => point.upper_bound),
+    1,
+  )
   const y = (value: number) => top + plotHeight - (value / maximum) * plotHeight
-  const line = (values: number[]) => values.map((value, index) => `${index ? 'L' : 'M'} ${x(index)} ${y(value)}`).join(' ')
+  const histPath = historicalPoints.map((point, index) => `${index ? 'L' : 'M'} ${histX(index)} ${y(point.observed_cases)}`).join(' ')
+  const projCentral = points.map((point, index) => `${index ? 'L' : 'M'} ${projX(index)} ${y(point.predicted_cases)}`).join(' ')
   const upper = points.map((point) => point.upper_bound)
   const lower = points.map((point) => point.lower_bound)
-  const central = points.map((point) => point.predicted_cases)
-  const band = `${line(upper)} ${[...lower].reverse().map((value, reverseIndex) => `L ${x(lower.length - 1 - reverseIndex)} ${y(value)}`).join(' ')} Z`
-  const componentNames = Array.from(new Set(points.flatMap((point) => Object.keys(point.component_predictions))))
-  const colors = ['#3966c5', '#a45bb7', '#c97b35', '#347c6a']
+  const band = upper.length
+    ? `${points.map((point, index) => `${index ? 'L' : 'M'} ${projX(index)} ${y(point.upper_bound)}`).join(' ')} ${[...lower].reverse().map((value, reverseIndex) => `L ${projX(lower.length - 1 - reverseIndex)} ${y(value)}`).join(' ')} Z`
+    : ''
+  const tickIndexes = Array.from(new Set([
+    0,
+    Math.floor((histCount - 1) / 2),
+    Math.max(histCount - 1, 0),
+    histCount,
+    histCount + Math.floor((projCount - 1) / 2),
+    totalSlots - 1,
+  ].filter((index) => index >= 0 && index < totalSlots)))
+
+  const heading = operational
+    ? 'Predicción operativa'
+    : scenario
+      ? 'Proyección de escenario hacia 2026'
+      : 'Escenario retrospectivo del modelo'
+  const subheading = operational
+    ? 'Valores e intervalos vigentes publicados por el backend para el horizonte seleccionado.'
+    : scenario
+      ? `Modelo entrenado con el histórico documentado${observationCutoff ? ` (corte ${formatDate(observationCutoff)})` : ''}. La curva azul muestra casos observados; la línea punteada proyecta el escenario incorporando clima, deforestación, acceso a servicios y estacionalidad.`
+      : `Resultado trazable para evaluación histórica${observationCutoff ? `, con corte observado ${formatDate(observationCutoff)}` : ''}. No representa el riesgo actual.`
 
   return (
     <>
       <div className="analytics-chart-heading">
-        <div><h3>{operational ? 'Predicción operativa' : 'Escenario retrospectivo del modelo'}</h3><p>{operational ? 'Valores e intervalos vigentes publicados por el backend para el horizonte seleccionado.' : `Resultado trazable para evaluación histórica${observationCutoff ? `, con corte observado ${formatDate(observationCutoff)}` : ''}. No representa el riesgo actual.`}</p></div>
-        <div className="analytics-legend"><span><i className="analytics-legend__line analytics-legend__line--observed" /> Predicción central</span><span><i className="analytics-legend__line analytics-legend__line--baseline" /> Componentes disponibles</span></div>
+        <div><h3>{heading}</h3><p>{subheading}</p></div>
+        <div className="analytics-legend">
+          {histCount ? <span><i className="analytics-legend__line analytics-legend__line--observed" /> Histórico observado</span> : null}
+          <span><i className="analytics-legend__line analytics-legend__line--projected" /> Proyección del modelo</span>
+        </div>
       </div>
       <div className="analytics-svg-wrap">
-        <svg className="analytics-line-chart analytics-forecast-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${operational ? 'Predicción operativa' : 'Escenario retrospectivo'} para ${diseaseLabel}`}>
+        <svg className="analytics-line-chart analytics-forecast-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${heading} para ${diseaseLabel}`}>
           {[0, .25, .5, .75, 1].map((fraction) => {
             const lineY = top + plotHeight * fraction
-            return <line key={fraction} x1={left} x2={width - 22} y1={lineY} y2={lineY} className="analytics-grid-line" />
+            return <g key={fraction}><line x1={left} x2={width - 22} y1={lineY} y2={lineY} className="analytics-grid-line" /><text x={left - 9} y={lineY + 4} textAnchor="end" className="analytics-axis-label">{formatNumber(maximum * (1 - fraction))}</text></g>
           })}
-          <path d={band} className="analytics-confidence-band" />
-          <path d={line(central)} className="analytics-history-observed" />
-          {componentNames.map((name, componentIndex) => {
-            const values = points.map((point) => point.component_predictions[name]).filter((value): value is number => typeof value === 'number')
-            if (values.length !== points.length) return null
-            return <path key={name} d={line(values)} fill="none" stroke={colors[componentIndex % colors.length]} strokeWidth="2" strokeDasharray="6 5"><title>{name}</title></path>
+          {histCount && observationCutoff ? <line x1={histX(histCount - 1)} x2={histX(histCount - 1)} y1={top} y2={top + plotHeight} className="analytics-cutoff-line" /> : null}
+          {histPath ? <path d={histPath} className="analytics-history-observed" fill="none" /> : null}
+          {band ? <path d={band} className="analytics-confidence-band" /> : null}
+          {projCentral ? <path d={projCentral} className="analytics-projection-line" fill="none" /> : null}
+          {historicalPoints.map((point, index) => <circle key={`hist-${point.week}`} cx={histX(index)} cy={y(point.observed_cases)} r={index === histCount - 1 ? 4 : 3} className="analytics-history-point"><title>{formatDate(point.week)}: {formatNumber(point.observed_cases)} casos observados</title></circle>)}
+          {points.map((point, index) => <circle key={point.target_week} cx={projX(index)} cy={y(point.predicted_cases)} r="4" className="analytics-projection-point"><title>{formatDate(point.target_week)}: {formatNumber(point.predicted_cases)} casos · IC {formatNumber(point.lower_bound)}–{formatNumber(point.upper_bound)}</title></circle>)}
+          {tickIndexes.map((index) => {
+            const label = index < histCount
+              ? formatDate(historicalPoints[index]?.week ?? '')
+              : formatDate(points[index - histCount]?.target_week ?? '')
+            const cx = xAt(index)
+            return <text key={`tick-${index}`} x={cx} y={height - 13} textAnchor="middle" className="analytics-axis-label">{label}</text>
           })}
-          {points.map((point, index) => <circle key={point.target_week} cx={x(index)} cy={y(point.predicted_cases)} r="4" className="analytics-history-point"><title>{formatDate(point.target_week)}: {formatNumber(point.predicted_cases)} casos · IC {formatNumber(point.lower_bound)}–{formatNumber(point.upper_bound)}</title></circle>)}
-          {points.map((point, index) => <text key={point.target_week} x={x(index)} y={height - 13} textAnchor="middle" className="analytics-axis-label">{formatDate(point.target_week)}</text>)}
         </svg>
       </div>
       <div className="analytics-model-metrics">
-        {points.map((point) => <div key={`${point.target_week}-${point.model_version}`}><span>{formatDate(point.target_week)}</span><strong>{formatNumber(point.predicted_cases)} casos</strong><small>IC: {formatNumber(point.lower_bound)}–{formatNumber(point.upper_bound)} · Modelo {point.model_version}</small></div>)}
+        {points.slice(0, 6).map((point) => <div key={`${point.target_week}-${point.model_version}`}><span>{formatDate(point.target_week)}</span><strong>{formatNumber(point.predicted_cases)} casos</strong><small>IC: {formatNumber(point.lower_bound)}–{formatNumber(point.upper_bound)}</small></div>)}
+        {points.length > 6 ? <div><span>…</span><strong>{formatNumber(points[points.length - 1].predicted_cases)} casos</strong><small>Fin de escenario · {formatDate(points[points.length - 1].target_week)}</small></div> : null}
       </div>
       <div className="analytics-forecast-context">
         <Info size={16} />
-        <span>Predicción puntual a {points.length > 1 ? `${points.length} semanas` : `${forecast.metadata.horizon ?? 4} semanas`} con intervalo de confianza. Los valores representan la mejor estimación del modelo, no una certeza. El área sombreada muestra el rango de incertidumbre.</span>
+        <span>
+          {scenario
+            ? `Escenario multi-paso desde el último dato documentado hasta ${formatDate(points[points.length - 1]?.target_week ?? '')}. Integra ${histCount ? `${histCount} semanas de histórico` : 'histórico territorial'}, variables climáticas, deforestación, acceso a agua/alcantarillado y estacionalidad. No es certeza epidemiológica: es la mejor estimación del modelo ante datos incompletos.`
+            : `Predicción a ${forecast.metadata.horizon ?? 4} semanas con intervalo de confianza. Los valores representan la mejor estimación del modelo, no una certeza.`}
+        </span>
       </div>
     </>
   )
@@ -351,7 +401,7 @@ export default function AnalyticsStudio({ diseaseId, horizon, territories = [], 
       {state === 'live' && view === 'forecast' && (
         <div className="analytics-view analytics-view--forecast">
           {forecastState === 'loading' && <div className="empty-state"><LoaderCircle className="spin" size={28} /><h3>Consultando predicción</h3><p>Esperando una respuesta específica del endpoint de pronósticos.</p></div>}
-          {forecastState === 'live' && forecast && <ForecastChart forecast={forecast} diseaseLabel={diseaseLabel} />}
+          {forecastState === 'live' && forecast && <ForecastChart forecast={forecast} series={series} diseaseLabel={diseaseLabel} />}
           {forecastState === 'empty' && <EmptyPanel onRetry={() => setReloadKey((value) => value + 1)} />}
           {forecastState === 'error' && <EmptyPanel error={forecastError} onRetry={() => setReloadKey((value) => value + 1)} />}
         </div>

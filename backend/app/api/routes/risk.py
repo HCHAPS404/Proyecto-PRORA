@@ -56,7 +56,10 @@ RISK_TRANSLATION = {"low": "bajo", "moderate": "moderado", "high": "alto", "crit
 
 
 def _forecast_mode(forecast: Forecast) -> str:
-    eligible = bool(getattr(forecast, "operationally_eligible", True))
+    warnings = list(getattr(forecast, "warnings", None) or [])
+    if "scenario_projection" in warnings:
+        return "scenario_projection"
+    eligible = bool(getattr(forecast, "operationally_eligible", False))
     if eligible and forecast.target_week >= date.today():
         return "operational"
     return "retrospective_research"
@@ -503,7 +506,13 @@ async def analytics_forecast_series(
                 )
             ).all()
             if rows:
-                forecast_mode = "retrospective_research"
+                has_scenario = any(
+                    "scenario_projection" in (forecast.warnings or [])
+                    for forecast, _ in rows
+                )
+                forecast_mode = (
+                    "scenario_projection" if has_scenario else "retrospective_research"
+                )
     buckets: dict[tuple[date, str], dict] = {}
     for forecast, model in rows:
         key = (forecast.target_week, model.version)
@@ -548,8 +557,15 @@ async def analytics_forecast_series(
         if forecast.observation_age_days is not None
     ]
     is_operational = bool(rows) and forecast_mode == "operational"
+    is_scenario = bool(rows) and forecast_mode == "scenario_projection"
     if is_operational:
         message = "Pronostico champion vigente y elegible para apoyo operativo."
+    elif is_scenario:
+        message = (
+            "Proyeccion de escenario entrenada sobre el historico documentado (p. ej. 2022-2025), "
+            "incorporando clima, deforestacion y variables socioambientales. "
+            "La curva proyecta hacia 2026; no sustituye vigilancia en tiempo real."
+        )
     elif rows:
         message = (
             "Serie retrospectiva del champion mas reciente; sirve para investigacion y "
@@ -567,6 +583,8 @@ async def analytics_forecast_series(
             "status": (
                 "ok"
                 if is_operational
+                else "scenario_projection"
+                if is_scenario
                 else "retrospective_research"
                 if points
                 else "no_operational_forecasts"
@@ -733,13 +751,36 @@ async def _query_risk_map(
         .group_by(Forecast.municipality_code)
         .subquery()
     )
-    statement = (
-        select(Forecast, Municipality, ModelVersion)
+    nearest_target = (
+        select(
+            Forecast.municipality_code.label("municipality_code"),
+            Forecast.issued_at.label("issued_at"),
+            func.min(Forecast.target_week).label("target_week"),
+        )
         .join(
             latest,
             and_(
                 latest.c.municipality_code == Forecast.municipality_code,
                 latest.c.issued_at == Forecast.issued_at,
+            ),
+        )
+        .join(ModelVersion, ModelVersion.id == Forecast.model_version_id)
+        .where(
+            Forecast.disease == disease,
+            Forecast.horizon_weeks == horizon,
+            _champion_forecast_clause(operational_only=operational_only),
+        )
+        .group_by(Forecast.municipality_code, Forecast.issued_at)
+        .subquery()
+    )
+    statement = (
+        select(Forecast, Municipality, ModelVersion)
+        .join(
+            nearest_target,
+            and_(
+                nearest_target.c.municipality_code == Forecast.municipality_code,
+                nearest_target.c.issued_at == Forecast.issued_at,
+                nearest_target.c.target_week == Forecast.target_week,
             ),
         )
         .join(Municipality, Municipality.code == Forecast.municipality_code)
@@ -792,7 +833,7 @@ async def _latest_forecast(
                 Forecast.horizon_weeks == horizon,
                 _champion_forecast_clause(operational_only=operational_only),
             )
-            .order_by(desc(Forecast.issued_at))
+            .order_by(desc(Forecast.issued_at), Forecast.target_week.asc())
             .limit(1)
         )
         row = (await session.execute(statement)).one_or_none()
