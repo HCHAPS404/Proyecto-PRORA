@@ -20,9 +20,12 @@ def build_engine(settings: Settings) -> AsyncEngine:
         "echo": settings.database_echo,
         "pool_pre_ping": True,
     }
+    connect_args = dict(settings.database_connect_args)
     if settings.database_url.startswith("sqlite") and ":memory:" in settings.database_url:
         options["poolclass"] = StaticPool
-        options["connect_args"] = {"check_same_thread": False}
+        connect_args["check_same_thread"] = False
+    if connect_args:
+        options["connect_args"] = connect_args
     engine = create_async_engine(settings.database_url, **options)
     if settings.database_url.startswith("sqlite"):
         is_memory_database = ":memory:" in settings.database_url

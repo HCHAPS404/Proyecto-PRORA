@@ -180,6 +180,7 @@ Para demos: abre `/ready` un minuto antes de mostrar la UI.
 | CORS en el navegador | `PRORA_CORS_ORIGINS` debe ser exactamente `["https://hchaps404.github.io"]` |
 | Pages sin datos | Falta `PRORA_API_BASE_URL` o no republicaste Pages |
 | `/ready` timeout | Espera el wake-up del free o revisa logs de `prora-api` |
+| Deploy failed en `prora-api` | Abre el servicio → **Logs**. Causa frecuente: SSL mal formado hacia Postgres (corregido en main reciente). Pulsa **Manual Deploy → Deploy latest commit** |
 | Postgres expirado | Crea otra DB free o migra a Neon/Supabase y pega `PRORA_DATABASE_URL` |
 
 ---

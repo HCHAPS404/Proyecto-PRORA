@@ -10,6 +10,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     _ephemeral_jwt_secret: bool = PrivateAttr(default=False)
+    _database_ssl: bool = PrivateAttr(default=False)
     model_config = SettingsConfigDict(
         env_file=".env",
         env_prefix="PRORA_",
@@ -27,6 +28,8 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./prora.db"
     database_echo: bool = False
     auto_create_tables: bool = True
+    # Forzar SSL hacia Postgres remoto (Render/Neon). asyncpg no usa ?ssl= en la URL.
+    database_ssl: bool | None = None
 
     jwt_secret: SecretStr | None = None
     jwt_algorithm: Literal["HS256", "HS384", "HS512"] = "HS256"
@@ -58,7 +61,8 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_runtime_security(self) -> Settings:
         # PaaS (Render, Railway, etc.) suelen entregar postgres://; SQLAlchemy async
-        # requiere el driver asyncpg. Render exige TLS en Postgres gestionado.
+        # requiere el driver asyncpg. SSL se configura en connect_args (no en la URL):
+        # asyncpg no acepta ?ssl=require como psycopg2.
         if self.database_url.startswith("postgres://"):
             self.database_url = "postgresql+asyncpg://" + self.database_url[len("postgres://") :]
         elif self.database_url.startswith("postgresql://"):
@@ -67,12 +71,28 @@ class Settings(BaseSettings):
             )
 
         if self.database_url.startswith("postgresql+asyncpg://"):
-            lower = self.database_url.lower()
-            is_local = "localhost" in lower or "127.0.0.1" in lower
-            has_ssl = "ssl=" in lower or "sslmode=" in lower
-            if not is_local and not has_ssl:
-                separator = "&" if "?" in self.database_url else "?"
-                self.database_url = f"{self.database_url}{separator}ssl=require"
+            from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+
+            parsed = urlparse(self.database_url)
+            query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+            ssl_hint = query.pop("ssl", None) or query.pop("sslmode", None)
+            if query != dict(parse_qsl(parsed.query, keep_blank_values=True)):
+                self.database_url = urlunparse(parsed._replace(query=urlencode(query)))
+
+            lower_host = (parsed.hostname or "").lower()
+            is_local = lower_host in {"localhost", "127.0.0.1"} or lower_host.endswith(
+                ".local"
+            )
+            # Hosts internos de Render (p. ej. dpg-xxx-a) no llevan punto ni TLS.
+            is_private_host = "." not in lower_host
+            if self.database_ssl is not None:
+                self._database_ssl = self.database_ssl
+            elif ssl_hint is not None:
+                self._database_ssl = str(ssl_hint).lower() not in {"0", "false", "disable", "off"}
+            else:
+                self._database_ssl = not is_local and not is_private_host
+        else:
+            self._database_ssl = False
 
         if self.environment == "production":
             if self.jwt_secret is None or len(self.jwt_secret.get_secret_value()) < 32:
@@ -101,6 +121,17 @@ class Settings(BaseSettings):
     @property
     def uses_ephemeral_jwt_secret(self) -> bool:
         return self._ephemeral_jwt_secret
+
+    @property
+    def uses_database_ssl(self) -> bool:
+        return self._database_ssl
+
+    @property
+    def database_connect_args(self) -> dict:
+        """Argumentos extra para asyncpg (SSL obligatorio en Postgres de Render)."""
+        if self._database_ssl and self.database_url.startswith("postgresql+asyncpg://"):
+            return {"ssl": True}
+        return {}
 
 
 @lru_cache

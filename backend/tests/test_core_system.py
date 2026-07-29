@@ -16,9 +16,9 @@ def test_paas_postgres_urls_are_normalized_to_asyncpg() -> None:
             database_url=raw,
             jwt_secret=SecretStr("test-only-secret-with-at-least-thirty-two-characters"),
         )
-        assert settings.database_url == (
-            "postgresql+asyncpg://user:pass@db.example/prora?ssl=require"
-        )
+        assert settings.database_url == "postgresql+asyncpg://user:pass@db.example/prora"
+        assert settings.uses_database_ssl is True
+        assert settings.database_connect_args == {"ssl": True}
 
 
 def test_local_postgres_url_does_not_force_ssl() -> None:
@@ -29,6 +29,19 @@ def test_local_postgres_url_does_not_force_ssl() -> None:
         jwt_secret=SecretStr("test-only-secret-with-at-least-thirty-two-characters"),
     )
     assert settings.database_url == "postgresql+asyncpg://user:pass@localhost:5432/prora"
+    assert settings.uses_database_ssl is False
+    assert settings.database_connect_args == {}
+
+
+def test_ssl_query_params_are_stripped_and_mapped_to_connect_args() -> None:
+    settings = Settings(
+        _env_file=None,
+        environment="test",
+        database_url="postgresql://user:pass@db.example/prora?sslmode=require",
+        jwt_secret=SecretStr("test-only-secret-with-at-least-thirty-two-characters"),
+    )
+    assert settings.database_url == "postgresql+asyncpg://user:pass@db.example/prora"
+    assert settings.database_connect_args == {"ssl": True}
 
 
 def test_health_ready_openapi_and_request_id(client: TestClient) -> None:
