@@ -30,8 +30,8 @@ USER prora
 EXPOSE 8000
 
 # Render y otros PaaS inyectan PORT; en local/compose se usa 8000.
-HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
-  CMD python -c "import os,urllib.request; p=os.environ.get('PORT','8000'); urllib.request.urlopen(f'http://127.0.0.1:{p}/ready', timeout=3)" || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+  CMD python -c "import os,urllib.request; p=os.environ.get('PORT','8000'); urllib.request.urlopen(f'http://127.0.0.1:{p}/health', timeout=3)" || exit 1
 
 ENTRYPOINT ["./docker-entrypoint.sh"]
 CMD ["api"]

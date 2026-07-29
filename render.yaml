@@ -25,8 +25,10 @@ services:
     autoDeployTrigger: commit
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
-    dockerCommand: api
-    healthCheckPath: /ready
+    # Comando completo: Render a veces no combina bien CMD corto con ENTRYPOINT.
+    dockerCommand: "./docker-entrypoint.sh api"
+    # /health no depende de la DB; evita marcar failed si Postgres tarda en aceptar conexiones.
+    healthCheckPath: /health
     envVars:
       - key: PRORA_ENVIRONMENT
         value: production
@@ -35,7 +37,7 @@ services:
       - key: PRORA_RUN_MIGRATIONS_ON_START
         value: "true"
       - key: PRORA_EMBEDDED_WORKER
-        value: "true"
+        value: "false"
       - key: PRORA_WORKER_POLL_SECONDS
         value: "10"
       - key: PRORA_CORS_ORIGINS
