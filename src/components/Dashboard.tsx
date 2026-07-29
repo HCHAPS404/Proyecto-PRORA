@@ -84,8 +84,11 @@ function readableModelName(value: string) {
   return labels[value] ?? titleCase(value)
 }
 
+import { featureLabel } from '../lib/feature-labels'
+
 function driverLabel(driver: Record<string, unknown>) {
-  return String(driver.label ?? driver.name ?? driver.feature ?? driver.variable ?? 'Factor sin etiqueta')
+  const raw = String(driver.label ?? driver.name ?? driver.feature ?? driver.variable ?? '')
+  return raw ? featureLabel(raw) : 'Factor sin etiqueta'
 }
 
 function driverValue(driver: Record<string, unknown>) {
@@ -488,7 +491,36 @@ export default function Dashboard({ onOpenAlerts, onOpenData, onNotify }: Dashbo
           <div className="card-heading-row"><div><span className="eyebrow">Trazabilidad</span><h2>Estado del modelo</h2></div><button className="icon-button" onClick={onOpenData} aria-label="Abrir centro de datos"><Database size={18} /></button></div>
           {model ? <><div className="trace-grid"><span><small>Versión</small><strong>{model.version}</strong></span><span><small>Estado</small><strong>{model.status}</strong></span><span><small>Entrenamiento</small><strong>{formatDate(model.trained_at)}</strong></span><span><small>Huella de datos</small><strong title={model.data_fingerprint ?? ''}>{model.data_fingerprint ? `${model.data_fingerprint.slice(0, 12)}…` : 'No informada'}</strong></span></div>{readingMode === 'advanced' && (registeredBenchmarks.length ? <div className="benchmark-comparison"><div className="benchmark-comparison__heading"><span><BrainCircuit size={16} /> Benchmark temporal registrado</span><small>Menor MAE es mejor · misma validación fuera de muestra</small></div><div className="benchmark-comparison__rows">{registeredBenchmarks.map((row) => <div key={row.name} className={row.name === benchmarkWinner ? 'is-winner' : ''}><span><strong>{readableModelName(row.name)}</strong><small>{row.kind === 'baseline' ? 'Línea base' : row.name === benchmarkWinner ? 'Mejor candidato' : 'Candidato'}</small></span><b>{formatNumber(row.mae)} MAE</b></div>)}</div><div className="technical-note"><Info size={16} /><span><strong>{benchmarkMetadata?.passes_baseline_gate === true ? 'Supera la mejor línea base registrada' : 'No supera la puerta de línea base'}</strong> Solo se comparan resultados persistidos por el entrenamiento; el navegador no recalcula ni completa métricas.</span></div></div> : <div className="technical-note"><Info size={16} /><span><strong>Sin benchmark comparable</strong> La versión está registrada, pero no expone candidatos evaluados con MAE fuera de muestra.</span></div>)}</> : selectedObservedTerritory || observedCoverage ? <div className="trace-grid"><span><small>Territorios con historia</small><strong>{formatNumber(observedCoverage?.municipalities)}</strong></span><span><small>Periodo cargado</small><strong>{observedCoverage ? `${formatDate(observedCoverage.firstWeek)} → ${formatDate(observedCoverage.latestWeek)}` : '—'}</strong></span><span><small>Casos publicados</small><strong>{formatNumber(observedCoverage?.totalCases)}</strong></span><span><small>Modelo</small><strong>Pendiente de train</strong></span></div> : <div className="empty-state"><Database size={25} /><h3>Sin modelo registrado</h3><p>No se recibió metadata para este evento y horizonte.</p></div>}
         </article>
-        <article className="content-card action-card"><div className="card-heading-row"><div><span className="eyebrow">Calidad de decisión</span><h2>Interpretación responsable</h2></div><CheckCircle2 size={20} /></div><div className="demo-disclaimer"><Info size={16} /><p>Las alertas orientan la priorización preventiva y deben complementarse con vigilancia de campo, protocolos institucionales y criterio epidemiológico.</p></div></article>
+        <article className="content-card action-card decision-quality-card">
+          <div className="card-heading-row"><div><span className="eyebrow">Calidad de decisión</span><h2>Interpretación responsable</h2></div><CheckCircle2 size={20} /></div>
+          {model ? (
+            <div className="decision-quality-grid">
+              <div className="decision-quality-item">
+                <small>Modelo seleccionado</small>
+                <strong>{readableModelName(model.metrics?.model_type as string ?? model.version)}</strong>
+                <span className="decision-quality-reason">{benchmarkWinner ? 'Mejor MAE en validación temporal' : 'Único candidato entrenado'}</span>
+              </div>
+              <div className="decision-quality-item">
+                <small>MAE (error absoluto medio)</small>
+                <strong>{model.metrics?.mae != null ? formatNumber(model.metrics.mae as number) : model.metrics?.temporal_mae != null ? formatNumber(model.metrics.temporal_mae as number) : '—'}</strong>
+                <span className="decision-quality-reason">{model.metrics?.skill_vs_baseline != null ? `Skill vs baseline: ${formatNumber((model.metrics.skill_vs_baseline as number) * 100)}%` : 'Validación fuera de muestra'}</span>
+              </div>
+              <div className="decision-quality-item">
+                <small>Protocolo de validación</small>
+                <strong>Expanding-window temporal</strong>
+                <span className="decision-quality-reason">Sin fuga de datos futuros</span>
+              </div>
+              <div className="decision-quality-item">
+                <small>Periodo de entrenamiento</small>
+                <strong>{model.training_period?.from && model.training_period?.to ? `${formatDate(model.training_period.from)} → ${formatDate(model.training_period.to)}` : 'No informado'}</strong>
+                <span className="decision-quality-reason">{model.metrics?.observation_age_days != null ? `Datos de hace ${model.metrics.observation_age_days} días` : 'Corte según fuente SIVIGILA'}</span>
+              </div>
+            </div>
+          ) : (
+            <div className="decision-quality-empty"><Info size={18} /><p>Sin modelo entrenado para este evento. Entrene un modelo para ver métricas de calidad.</p></div>
+          )}
+          <div className="demo-disclaimer"><Info size={16} /><p>Las alertas orientan la priorización preventiva y deben complementarse con vigilancia de campo, protocolos institucionales y criterio epidemiológico.</p></div>
+        </article>
       </section>
     </div>
   )

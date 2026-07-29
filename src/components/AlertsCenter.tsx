@@ -124,9 +124,11 @@ function mapRiskLevel(value: string): RiskLevel {
   return 'Moderado'
 }
 
+import { featureLabel } from '../lib/feature-labels'
+
 function driverLabel(driver: Record<string, unknown>) {
   const raw = driver.feature ?? driver.name ?? driver.variable ?? driver.label
-  return typeof raw === 'string' && raw.trim() ? raw.replace(/_/g, ' ') : 'Variable explicativa'
+  return typeof raw === 'string' && raw.trim() ? featureLabel(raw) : 'Variable explicativa'
 }
 
 function mapAlert(alert: ApiAlertEvent): AlertItem {
@@ -451,9 +453,9 @@ export default function AlertsCenter({ onOpenAlert, onNotify }: AlertsCenterProp
       </header>
 
       <div className="metric-strip alerts-metrics">
-        <article className="metric-card metric-critical"><span className="metric-icon"><TriangleAlert size={19} /></span><div><strong>{loadingAlerts ? '…' : metricsAvailable ? criticalCount : '—'}</strong><span>riesgos críticos</span><small>Pronósticos publicados</small></div></article>
-        <article className="metric-card"><span className="metric-icon"><ShieldAlert size={19} /></span><div><strong>{loadingAlerts ? '…' : metricsAvailable ? activeCount : '—'}</strong><span>alertas activas</span><small>{metricsAvailable ? `${diseaseCount} enfermedades en las alertas` : 'Sin respuesta de API'}</small></div></article>
-        <article className="metric-card"><span className="metric-icon"><Clock3 size={19} /></span><div><strong>{loadingAlerts ? '…' : showObservedFallback ? (loadingObserved ? '…' : observedSignals.length || '—') : metricsAvailable ? horizonSummary : '—'}</strong><span>{showObservedFallback ? 'municipios priorizados' : 'horizonte predictivo'}</span><small>{showObservedFallback ? 'Por último corte observado' : 'Pronósticos publicados'}</small></div></article>
+        <article className="metric-card metric-critical"><span className="metric-icon"><TriangleAlert size={19} /></span><div><strong>{loadingAlerts ? '…' : metricsAvailable ? criticalCount + alertItems.filter((a) => a.level === 'Crítico' && statusBucket(a) !== 'Activas').length : '—'}</strong><span>riesgos críticos</span><small>{metricsAvailable && criticalCount > 0 ? `${criticalCount} activos ahora` : 'Incluye históricos'}</small></div></article>
+        <article className="metric-card"><span className="metric-icon"><ShieldAlert size={19} /></span><div><strong>{loadingAlerts ? '…' : metricsAvailable ? alertItems.length : '—'}</strong><span>alertas totales</span><small>{metricsAvailable ? `${activeCount} activas · ${historicalCount} históricas` : 'Sin respuesta de API'}</small></div></article>
+        <article className="metric-card"><span className="metric-icon"><Clock3 size={19} /></span><div><strong>{loadingAlerts ? '…' : showObservedFallback ? (loadingObserved ? '…' : observedSignals.length || '—') : metricsAvailable ? horizonSummary : '—'}</strong><span>{showObservedFallback ? 'municipios priorizados' : 'horizonte predictivo'}</span><small>{showObservedFallback ? 'Por último corte observado' : `${diseaseCount} enfermedades`}</small></div></article>
         <article className="metric-card"><span className="metric-icon"><CheckCircle2 size={19} /></span><div><strong>{loadingAlerts ? '…' : showObservedFallback ? (loadingObserved ? '…' : observedCasesTotal || '—') : metricsAvailable ? reviewedRate : '—'}</strong><span>{showObservedFallback ? 'casos del último corte' : 'alertas revisadas'}</span><small>{showObservedFallback ? `Evento: ${titleCase(observedDisease)}` : 'Estado persistido'}</small></div></article>
       </div>
 

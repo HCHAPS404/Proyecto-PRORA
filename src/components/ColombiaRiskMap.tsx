@@ -37,6 +37,7 @@ interface GeoBounds { minLon: number; maxLon: number; minLat: number; maxLat: nu
 interface MapPan { x: number; y: number }
 
 let featureCache: GeoFeature[] | null = null
+let sanAndresCache: GeoFeature[] | null = null
 let featureRequest: Promise<GeoFeature[]> | null = null
 
 function loadFeatures() {
@@ -48,6 +49,7 @@ function loadFeatures() {
         return response.json() as Promise<GeoCollection>
       })
       .then((collection) => {
+        sanAndresCache = collection.features.filter((feature) => feature.properties.NOMBRE_DPT?.toLowerCase().includes('san andrés'))
         featureCache = collection.features.filter((feature) => !feature.properties.NOMBRE_DPT?.toLowerCase().includes('san andrés'))
         return featureCache
       })
@@ -61,12 +63,17 @@ function loadFeatures() {
 
 function useColombiaFeatures() {
   const [features, setFeatures] = useState<GeoFeature[]>(() => featureCache ?? [])
+  const [sanAndres, setSanAndres] = useState<GeoFeature[]>(() => sanAndresCache ?? [])
   useEffect(() => {
     let active = true
-    loadFeatures().then((loaded) => active && setFeatures(loaded)).catch(() => active && setFeatures([]))
+    loadFeatures().then((loaded) => {
+      if (!active) return
+      setFeatures(loaded)
+      setSanAndres(sanAndresCache ?? [])
+    }).catch(() => active && setFeatures([]))
     return () => { active = false }
   }, [])
-  return features
+  return { features, sanAndres }
 }
 
 const RISK_DEFINITIONS: Record<RiskLevel, RiskDefinition> = {
@@ -147,8 +154,9 @@ export default function ColombiaRiskMap({ disease, horizon, selectedTerritory, s
   const [pan, setPan] = useState<MapPan>({ x: 0, y: 0 })
   const [dragging, setDragging] = useState(false)
   const dragRef = useRef({ pointerId: -1, x: 0, y: 0, moved: false })
-  const mainFeatures = useColombiaFeatures()
+  const { features: mainFeatures, sanAndres: sanAndresFeatures } = useColombiaFeatures()
   const bounds = useMemo(() => getBounds(mainFeatures), [mainFeatures])
+  const sanAndresBounds = useMemo(() => sanAndresFeatures.length ? getBounds(sanAndresFeatures) : null, [sanAndresFeatures])
   const safeHorizon = Number.isFinite(horizon) ? Math.max(1, Math.min(4, Math.round(horizon))) : 4
   const historicalMode = Boolean(selectedHistoricalTerritory)
 
@@ -171,6 +179,10 @@ export default function ColombiaRiskMap({ disease, horizon, selectedTerritory, s
           y,
           score: clampRisk(item.risk_score),
           level: item.risk_level,
+          predictedCases: item.expected_cases ?? null,
+          intervalLower: item.lower_bound ?? null,
+          intervalUpper: item.upper_bound ?? null,
+          outbreakProbability: null as number | null,
         }
       })
     return liveTerritories
@@ -188,7 +200,7 @@ export default function ColombiaRiskMap({ disease, horizon, selectedTerritory, s
         ...territory,
         x,
         y,
-        radius: 2.4 + Math.sqrt(Math.max(0, territory.latest_observed_cases) / maximum) * 4.6,
+        radius: 1.8 + Math.sqrt(Math.max(0, territory.latest_observed_cases) / maximum) * 3.2,
       }
     })
   }, [bounds, historicalTerritories])
@@ -317,8 +329,8 @@ export default function ColombiaRiskMap({ disease, horizon, selectedTerritory, s
                 const isSelected = selected?.id === territory.id
                 const risk = RISK_DEFINITIONS[territory.level]
                 return <g key={territory.id} className={`colombia-risk-map__marker colombia-risk-map__marker--${territory.level}${isSelected ? ' is-selected' : ''}`} role="button" tabIndex={0} aria-pressed={isSelected} aria-label={`${territory.name}: riesgo ${risk.label.toLowerCase()}, ${territory.score} de 100. Seleccionar territorio.`} onClick={() => { if (!dragRef.current.moved) onSelectTerritory(territory.name) }} onKeyDown={(event) => handleKeyboardSelection(event, territory)} onMouseEnter={() => setHoveredTerritory(territory.id)} onMouseLeave={() => setHoveredTerritory(null)} onFocus={() => setHoveredTerritory(territory.id)} onBlur={() => setHoveredTerritory(null)}>
-                  <circle className="colombia-risk-map__marker-pulse" cx={territory.x} cy={territory.y} r={isSelected ? 17 : 14} fill={risk.color} />
-                  <circle className="colombia-risk-map__marker-core" cx={territory.x} cy={territory.y} r={isSelected ? 9 : 7} fill={risk.color} filter="url(#map-marker-shadow)" />
+                  <circle className="colombia-risk-map__marker-pulse" cx={territory.x} cy={territory.y} r={isSelected ? 13 : 10} fill={risk.color} />
+                  <circle className="colombia-risk-map__marker-core" cx={territory.x} cy={territory.y} r={isSelected ? 7 : 5} fill={risk.color} filter="url(#map-marker-shadow)" />
                   <title>{`${territory.name}: ${territory.score}/100, riesgo ${risk.label.toLowerCase()} (estimación del modelo).`}</title>
                 </g>
               })}
@@ -329,6 +341,17 @@ export default function ColombiaRiskMap({ disease, horizon, selectedTerritory, s
             </g>
           </g>
         </svg>
+        {sanAndresBounds && sanAndresFeatures.length > 0 && (
+          <svg className="colombia-risk-map__san-andres-inset" viewBox="0 0 80 100" aria-label="San Andrés y Providencia">
+            <rect x="0" y="0" width="80" height="100" rx="6" className="colombia-risk-map__inset-bg" />
+            <text x="40" y="12" textAnchor="middle" className="colombia-risk-map__inset-label">San Andrés</text>
+            <g transform="translate(5 16)">
+              {sanAndresFeatures.map((feature) => (
+                <path key={feature.properties.DPTO ?? feature.properties.NOMBRE_DPT} className="colombia-risk-map__department" d={featurePath(feature, sanAndresBounds)} />
+              ))}
+            </g>
+          </svg>
+        )}
       </div>
 
       <aside className="colombia-risk-map__dock" aria-live="polite">
@@ -358,6 +381,17 @@ export default function ColombiaRiskMap({ disease, horizon, selectedTerritory, s
               <div><dt>Población aprox.</dt><dd>{dockedRisk.population}</dd></div>
             </dl>
             <p className="colombia-risk-map__tooltip-signal">Señal climática: {dockedRisk.climateSignal}</p>
+            {dockedRisk.predictedCases != null && (
+              <dl className="colombia-risk-map__tooltip-metrics colombia-risk-map__tooltip-metrics--forecast">
+                <div><dt>Casos predichos</dt><dd>{formatMapNumber(dockedRisk.predictedCases)}</dd></div>
+                {dockedRisk.intervalLower != null && dockedRisk.intervalUpper != null && (
+                  <div><dt>Intervalo</dt><dd>{formatMapNumber(dockedRisk.intervalLower)}–{formatMapNumber(dockedRisk.intervalUpper)}</dd></div>
+                )}
+                {dockedRisk.outbreakProbability != null && (
+                  <div><dt>Prob. brote</dt><dd>{Math.round(dockedRisk.outbreakProbability * 100)}%</dd></div>
+                )}
+              </dl>
+            )}
           </>
         ) : (
           <div className="colombia-risk-map__dock-empty">

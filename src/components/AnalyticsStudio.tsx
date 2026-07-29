@@ -57,12 +57,12 @@ function forecastFailureMessage(reason: unknown) {
     : 'La consulta de predicción falló antes de recibir una respuesta verificable.'
 }
 
-function EmptyPanel({ error, onRetry }: { error?: string; onRetry: () => void }) {
+function EmptyPanel({ error, onRetry, hint }: { error?: string; onRetry: () => void; hint?: string }) {
   return (
     <div className="empty-state" role="status">
       <Info size={28} />
       <h3>{error ? 'No fue posible consultar la analítica' : 'No hay datos publicados para este filtro'}</h3>
-      <p>{error || 'La API respondió correctamente, pero todavía no existen observaciones o predicciones operativas.'}</p>
+      <p>{error || hint || 'La API respondió correctamente, pero todavía no existen observaciones o predicciones operativas para el territorio seleccionado. Intente con otro municipio o departamento.'}</p>
       <button className="button button--secondary" type="button" onClick={onRetry}><RefreshCw size={16} /> Reintentar</button>
     </div>
   )
@@ -215,7 +215,11 @@ function ForecastChart({ forecast, diseaseLabel }: { forecast: AnalyticsForecast
         </svg>
       </div>
       <div className="analytics-model-metrics">
-        {points.map((point) => <div key={`${point.target_week}-${point.model_version}`}><span>{formatDate(point.target_week)}</span><strong>{formatNumber(point.predicted_cases)} casos</strong><small>Modelo {point.model_version} · {point.municipalities} municipios</small></div>)}
+        {points.map((point) => <div key={`${point.target_week}-${point.model_version}`}><span>{formatDate(point.target_week)}</span><strong>{formatNumber(point.predicted_cases)} casos</strong><small>IC: {formatNumber(point.lower_bound)}–{formatNumber(point.upper_bound)} · Modelo {point.model_version}</small></div>)}
+      </div>
+      <div className="analytics-forecast-context">
+        <Info size={16} />
+        <span>Predicción puntual a {points.length > 1 ? `${points.length} semanas` : `${forecast.metadata.horizon ?? 4} semanas`} con intervalo de confianza. Los valores representan la mejor estimación del modelo, no una certeza. El área sombreada muestra el rango de incertidumbre.</span>
       </div>
     </>
   )

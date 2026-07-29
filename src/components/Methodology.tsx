@@ -46,7 +46,7 @@ const limitationLabels: Record<string, string> = {
   no_explicit_zero_case_reports: 'La fuente no publica semanas con cero casos',
   low_reporting_density: 'Panel semanal incompleto',
   stale_or_missing_epidemiological_cutoff: 'Corte epidemiológico histórico o ausente',
-  missing_trained_horizons: 'Faltan horizontes entrenados',
+  missing_trained_horizons: 'Solo horizonte 4 entrenado (configuración actual)',
 }
 const covariateLabels: Record<string, string> = {
   climate: 'Clima IDEAM',
