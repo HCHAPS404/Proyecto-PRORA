@@ -141,7 +141,7 @@ function featurePath(feature: GeoFeature, bounds: GeoBounds) {
 }
 
 export function ColombiaOutline({ fill = '#d9eee6', stroke = '#ffffff', transform = 'translate(0 0)' }: { fill?: string; stroke?: string; transform?: string }) {
-  const features = useColombiaFeatures()
+  const { features } = useColombiaFeatures()
   const bounds = useMemo(() => getBounds(features), [features])
   if (!bounds) return <g className="colombia-outline colombia-outline--loading" transform={transform} />
   return <g className="colombia-outline" transform={transform}>{features.map((feature) => <path key={feature.properties.DPTO ?? feature.properties.NOMBRE_DPT} d={featurePath(feature, bounds)} fill={fill} stroke={stroke} strokeWidth="1.2" strokeLinejoin="round" />)}</g>
