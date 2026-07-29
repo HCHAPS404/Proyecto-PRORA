@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     auto_create_tables: bool = True
     # Forzar SSL hacia Postgres remoto (Render/Neon). asyncpg no usa ?ssl= en la URL.
     database_ssl: bool | None = None
+    # Si true, sync/train se ejecutan en BackgroundTasks de la API (plan free sin worker).
+    jobs_inline: bool = False
 
     jwt_secret: SecretStr | None = None
     jwt_algorithm: Literal["HS256", "HS384", "HS512"] = "HS256"

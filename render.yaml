@@ -40,6 +40,9 @@ services:
       # El supervisor espera /health antes de cargar el worker (sklearn).
       - key: PRORA_EMBEDDED_WORKER
         value: "false"
+      # Procesa sync/train en la API (sin worker aparte) — necesario en plan free.
+      - key: PRORA_JOBS_INLINE
+        value: "true"
       - key: PRORA_WORKER_POLL_SECONDS
         value: "10"
       - key: PRORA_CORS_ORIGINS

@@ -3,12 +3,13 @@ from __future__ import annotations
 from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Response, status
 from sqlalchemy import Integer, and_, cast, desc, func, or_, select
 
 from app.api.dependencies import SessionDep, get_runtime_settings, require_roles
 from app.core.config import Settings
 from app.core.errors import DomainError
+from app.jobs.inline import run_training_inline
 from app.ml.concurrency import acquire_model_promotion_locks
 from app.ml.readiness import build_model_portfolio_readiness
 from app.ml.registry import ModelRegistry
@@ -1104,6 +1105,8 @@ async def request_training(
     payload: TrainingRequest,
     user: Operator,
     session: SessionDep,
+    background_tasks: BackgroundTasks,
+    settings: Annotated[Settings, Depends(get_runtime_settings)],
 ) -> TrainingJobResponse:
     horizons = sorted(set(payload.horizons))
     if any(horizon not in (3, 4) for horizon in horizons):
@@ -1117,6 +1120,8 @@ async def request_training(
     session.add(job)
     await session.commit()
     await session.refresh(job)
+    if settings.jobs_inline:
+        background_tasks.add_task(run_training_inline, job.id)
     return TrainingJobResponse(
         job_id=job.id,
         disease=job.disease,

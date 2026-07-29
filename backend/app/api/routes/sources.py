@@ -6,11 +6,24 @@ from typing import Annotated
 from uuid import uuid4
 
 import anyio
-from fastapi import APIRouter, Depends, File, Form, Query, Request, Response, UploadFile, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
 from sqlalchemy import select
 
-from app.api.dependencies import SessionDep, require_roles
+from app.api.dependencies import SessionDep, get_runtime_settings, require_roles
+from app.core.config import Settings
 from app.core.errors import DomainError
+from app.jobs.inline import run_ingestion_inline
 from app.models.entities import User, UserRole
 from app.models.epidemiology import DataSource, IngestionRun, PipelineStatus, RawSnapshot
 from app.schemas.sources import (
@@ -105,9 +118,14 @@ async def trigger_source_sync(
     source_id: str,
     _: Operator,
     session: SessionDep,
+    background_tasks: BackgroundTasks,
+    settings: Annotated[Settings, Depends(get_runtime_settings)],
     payload: SourceSyncRequest | None = None,
 ) -> IngestionRun:
-    return await schedule_source_sync(session, source_id, payload or SourceSyncRequest())
+    run = await schedule_source_sync(session, source_id, payload or SourceSyncRequest())
+    if settings.jobs_inline:
+        background_tasks.add_task(run_ingestion_inline, run.id)
+    return run
 
 
 TEMPLATE_HEADERS: dict[str, str] = {
