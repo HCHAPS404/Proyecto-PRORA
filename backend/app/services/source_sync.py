@@ -171,7 +171,7 @@ async def schedule_source_sync(
         )
     if source.status == SourceStatus.DISABLED.value:
         raise DomainError("source_disabled", "La fuente está deshabilitada", 409)
-    await fail_stuck_ingestion_runs(session, older_than_minutes=45)
+    await fail_stuck_ingestion_runs(session, older_than_minutes=20)
     existing = await session.scalar(
         select(IngestionRun).where(
             IngestionRun.source_id == source_id,

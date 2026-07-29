@@ -15,6 +15,7 @@ from app.core.logging import configure_logging
 from app.core.middleware import RateLimitMiddleware, RequestContextMiddleware
 from app.db.base import Base
 from app.db.session import build_engine, build_session_factory
+from app.jobs.training import fail_stuck_training_runs
 from app.models import DataSource  # noqa: F401 - register all ORM tables
 from app.services.source_catalog import seed_source_catalog
 from app.services.source_sync import fail_stuck_ingestion_runs
@@ -36,15 +37,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 await seed_source_catalog(session)
         try:
             async with session_factory() as session:
-                cleared = await fail_stuck_ingestion_runs(
+                cleared_sync = await fail_stuck_ingestion_runs(
                     session,
-                    older_than_minutes=30,
+                    older_than_minutes=20,
                     reason="cleared_on_api_startup",
                 )
-                if cleared:
+                cleared_train = await fail_stuck_training_runs(
+                    session,
+                    older_than_minutes=20,
+                    reason="cleared_on_api_startup",
+                )
+                if cleared_sync or cleared_train:
                     logger.warning(
-                        "Cleared stuck ingestion runs on startup",
-                        extra={"cleared": cleared},
+                        "Cleared stuck jobs on startup",
+                        extra={"sync": cleared_sync, "train": cleared_train},
                     )
                 await seed_source_catalog(session)
         except Exception:

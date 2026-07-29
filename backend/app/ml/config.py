@@ -33,8 +33,8 @@ class MLConfig:
     horizons: tuple[int, ...] = (3, 4)
     min_train_weeks: int = 52
     validation_weeks: int = 4
-    n_splits: int = 4
-    territorial_splits: int = 3
+    n_splits: int = 3
+    territorial_splits: int = 2
     # Leave-department-out already provides the outer generalisation test.  A
     # single chronological meta holdout inside each outer fold keeps the full
     # stack honest without multiplying the training cost by every temporal
@@ -45,14 +45,15 @@ class MLConfig:
     max_forecast_data_age_days: int = 35
     min_observed_training_rows: int = 500
     min_training_territories: int = 20
-    min_training_weeks: int = 104
+    # Un año epidemiológico (~52 semanas) basta para investigación con microdatos anuales.
+    min_training_weeks: int = 52
     min_reporting_density: float = 0.10
     random_state: int = 42
-    enable_lstm: bool = True
-    lstm_epochs: int = 35
+    enable_lstm: bool = False
+    lstm_epochs: int = 20
     lstm_hidden_size: int = 24
-    rf_estimators: int = 160
-    hgb_iterations: int = 140
+    rf_estimators: int = 80
+    hgb_iterations: int = 80
     known_exogenous: tuple[str, ...] = (
         "precipitation",
         "temperature",

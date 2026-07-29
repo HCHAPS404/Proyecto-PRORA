@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -33,8 +33,44 @@ EXPLANATION_TERRITORY_CHUNK_SIZE = 64
 # Full local explanations for every municipality dominate wall-clock time on
 # national panels. Prioritise high-risk territories; the rest stay auditable
 # via component predictions and can be recomputed later.
-EXPLANATION_PRIORITY_LIMIT = 120
+EXPLANATION_PRIORITY_LIMIT = 80
 EXPLANATION_PRIORITY_PROBABILITY = 0.55
+
+
+async def fail_stuck_training_runs(
+    session: AsyncSession,
+    *,
+    older_than_minutes: int = 25,
+    reason: str = "cleared_stuck_training_run",
+) -> int:
+    """Mark orphaned PENDING/RUNNING training jobs as failed (Render free OOM/kills)."""
+    cutoff = datetime.now(UTC) - timedelta(minutes=max(1, older_than_minutes))
+    stuck = list(
+        (
+            await session.scalars(
+                select(ModelTrainingRun).where(
+                    ModelTrainingRun.status.in_(
+                        [PipelineStatus.PENDING.value, PipelineStatus.RUNNING.value]
+                    )
+                )
+            )
+        ).all()
+    )
+    cleared = 0
+    for job in stuck:
+        started = job.started_at or job.created_at
+        if started is None:
+            continue
+        aware = started if started.tzinfo else started.replace(tzinfo=UTC)
+        if aware > cutoff:
+            continue
+        job.status = PipelineStatus.FAILED.value
+        job.finished_at = datetime.now(UTC)
+        job.error_message = reason
+        cleared += 1
+    if cleared:
+        await session.commit()
+    return cleared
 
 
 async def claim_training_job(session: AsyncSession) -> ModelTrainingRun | None:

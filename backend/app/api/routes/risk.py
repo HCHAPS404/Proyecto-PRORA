@@ -1115,7 +1115,16 @@ async def request_training(
         disease=payload.disease,
         horizons=horizons,
         requested_by=user.id,
-        parameters={"force": payload.force},
+        parameters={
+            "force": payload.force,
+            # Perfil ligero para plan free (Render): sin LSTM y menos árboles.
+            "enable_lstm": False,
+            "rf_estimators": 60,
+            "hgb_iterations": 60,
+            "n_splits": 2,
+            "territorial_splits": 2,
+            "territorial_meta_splits": 1,
+        },
     )
     session.add(job)
     await session.commit()
