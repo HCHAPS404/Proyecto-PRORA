@@ -154,7 +154,7 @@ function HistoryInsights({ series, summary }: { series: AnalyticsSeries; summary
               <span>Últimas {window.weeks} semanas</span>
               <strong>{formatNumber(window.observed_cases)} casos</strong>
               <small>
-                {window.comparable && window.percent_change_vs_previous != null
+                {window.percent_change_vs_previous != null && window.previous_observed_cases != null
                   ? `${window.percent_change_vs_previous >= 0 ? '+' : ''}${formatNumber(window.percent_change_vs_previous)}% vs ventana previa`
                   : `${window.observed_week_count} semanas con dato · ${window.missing_week_count} faltantes`}
               </small>
